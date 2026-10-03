@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "explain-branch",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Analyse the current Git branch and produce a narrated explainer video of what changed, how it works, and how it fits the wider application.",
   "license": "MIT",
   "keywords": [

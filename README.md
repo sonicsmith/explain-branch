@@ -4,10 +4,10 @@ A Codex plugin/skill that analyses the current Git branch and produces a **narra
 explainer video** showing what changed, how the changed code works, and how it fits the
 wider application.
 
-> **Status: Phase 1 — read-only branch inspection implemented.** Scene planning,
-> narration, and rendering are not built yet. See [`plan/overview.md`](plan/overview.md) for
-> the phased plan and [`docs/adr/0001-tooling-decisions.md`](docs/adr/0001-tooling-decisions.md)
-> for the verified tooling decisions.
+> **Status: Phase 2 — branch inspection and scene planning implemented.** Narration and
+> rendering are not built yet. See [`plan/overview.md`](plan/overview.md) for the phased plan
+> and [`docs/adr/0001-tooling-decisions.md`](docs/adr/0001-tooling-decisions.md) for the
+> verified tooling decisions.
 
 ## Layout
 
@@ -26,8 +26,16 @@ wider application.
 │   │   └── inspectBranch.ts        # branch/base resolution
 │   ├── analysis/
 │   │   ├── buildChangeInventory.ts # structured change inventory
-│   │   └── fileClassification.ts   # language + generated-file detection
-│   └── cli/explainBranch.ts        # Phase 1 inspection CLI
+│   │   ├── fileClassification.ts   # language + generated-file detection
+│   │   ├── sourceSnapshot.ts       # read-only source capture
+│   │   └── validatePlan.ts         # plan schema validation
+│   ├── planning/
+│   │   ├── types.ts                # versioned scene-plan schema
+│   │   ├── paths.ts                # path-safety checks
+│   │   └── buildPlan.ts            # deterministic planner
+│   └── cli/
+│       ├── explainBranch.ts        # Phase 1 inspection CLI
+│       └── planBranch.ts           # Phase 2 planning CLI
 ├── tests/                          # node:test suite + temp-repo fixtures
 ├── .agents/plugins/marketplace.json# repo marketplace for local testing
 ├── docs/adr/0001-tooling-decisions.md
@@ -42,14 +50,14 @@ wider application.
 - macOS 15+ for Remotion rendering (verified on macOS 26.6.2).
 - `OPENAI_API_KEY` in the environment for narration (later phases only).
 
-## Run the branch inspector
+## Inspect a branch
 
 ```bash
 npm install
 npm run inspect -- --base main      # human-readable summary (read-only)
 npm run inspect -- --json           # full structured inventory
 npm run inspect -- --include-working-tree
-npm test                            # 21 tests
+npm test                            # 43 tests
 npm run typecheck
 ```
 
@@ -57,6 +65,20 @@ Base precedence: `--base` > `.explain-branch.json` / `package.json` > upstream >
 When the choice is ambiguous the CLI exits `2` with guidance. Everything runs through a
 read-only Git runner: no checkout/reset/stash/commit, `--no-ext-diff`/`--no-textconv` so
 repository-configured programs never execute, and writes are confined to `artifacts/`.
+
+## Build a scene plan
+
+```bash
+npm run plan                    # writes artifacts/branch-plan.json
+npm run plan -- --stdout        # print the plan instead of writing
+npm run plan -- --max-scenes 3
+```
+
+The planner groups related files into logical scenes (not one scene per file), ranks them,
+and emits a versioned JSON plan matching `src/planning/types.ts`. Every referenced file and
+line range is verified against a read-only source snapshot before the plan is accepted
+(`src/analysis/validatePlan.ts`); generated files become omissions and honest caveats are
+attached. The plan is deterministic for a given inventory and timestamp.
 
 ## Run the placeholder skeleton
 
@@ -85,8 +107,8 @@ been exercised in a live Codex client (none is installed here). To verify:
 | Phase        | Deliverable                              |
 | ------------ | ---------------------------------------- |
 | **0 (done)** | ADR + invocable plugin skeleton          |
-| 1            | Tested branch-inspection CLI (read-only) |
-| 2            | Validated scene plan JSON                |
+| **1 (done)** | Tested branch-inspection CLI (read-only) |
+| **2 (done)** | Validated scene plan JSON                |
 | 3            | Serviceable silent video renderer        |
 | 4            | Narration + synchronization              |
 | 5            | End-to-end integration via the skill     |

@@ -9,25 +9,32 @@ Produce a narrated explainer video that shows **what changed on the current bran
 the changed code works, and how it fits into the wider application** — like a developer
 walking another developer through a pull request.
 
-## Current status (Phase 1)
+## Current status (Phase 2)
 
-Branch inspection is implemented; scene planning, narration, and rendering are **not**.
-The inspector is a read-only CLI:
+Branch inspection and scene planning are implemented; narration and rendering are **not**.
+
+Inspect the branch (read-only):
 
 ```bash
 node "${PLUGIN_ROOT}/src/cli/explainBranch.ts" --json
 ```
 
-It prints a structured inventory of the current branch's changes (resolved base, merge
-base, ahead/behind counts, and every changed file with its hunks and added/deleted line
-ranges). Options: `--base <ref>`, `--include-working-tree`, `--repo <path>`, `--json`.
-Exit code `2` means the base could not be determined and the user must choose one.
+Build a validated scene plan (writes only `artifacts/branch-plan.json`):
 
-It never modifies the repository: no checkout, reset, stash, or commit, and no writes to
-`.git` or tracked files.
+```bash
+node "${PLUGIN_ROOT}/src/cli/planBranch.ts"
+```
 
-If the user asks for a full explainer video, say plainly that the later stages are not
-implemented yet, and offer the branch inventory instead. Do not claim a video was
+Options for both: `--base <ref>`, `--include-working-tree`, `--repo <path>`. The inspector
+also takes `--json`; the planner takes `--out <path>`, `--max-scenes <n>`, `--stdout`.
+Exit code `2` means the base could not be determined and the user must choose one; exit
+code `3` means the generated plan failed validation.
+
+Neither command modifies the repository: no checkout, reset, stash, or commit, no writes
+to `.git` or tracked files, and the only output file is the plan under `artifacts/`.
+
+If the user asks for a full explainer video, say plainly that narration and rendering are
+not implemented yet, and offer the scene plan instead. Do not claim a video was produced.
 produced.
 
 ## Workflow (target behaviour)
