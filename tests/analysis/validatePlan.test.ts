@@ -176,6 +176,29 @@ test("rejects duplicate diagram node ids", () => {
   assert.match(messages(plan), /duplicate node id/);
 });
 
+test("rejects a malformed change entry", () => {
+  const plan = validPlan();
+  plan.scenes[0].changes = [
+    {
+      path: "../escape.ts",
+      changeType: "banana",
+      language: "",
+      addedLines: -1,
+      deletedLines: 0,
+      isBinary: false,
+      isGenerated: false,
+    },
+  ];
+
+  const result = run(plan);
+  assert.equal(result.valid, false);
+  const text = messages(plan);
+  assert.match(text, /\.\./);
+  assert.match(text, /changeType must be one of/);
+  assert.match(text, /language must be a non-empty string/);
+  assert.match(text, /non-negative integers/);
+});
+
 test("requires narration audio when asked to", () => {
   const plan = validPlan();
   const result = validatePlan(plan as ExplainerPlan, {

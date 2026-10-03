@@ -4,7 +4,7 @@
  * {@link PLAN_SCHEMA_VERSION} on breaking changes.
  */
 
-export const PLAN_SCHEMA_VERSION = 1;
+export const PLAN_SCHEMA_VERSION = 2;
 
 export type SceneVisual =
   | "code-walkthrough"
@@ -52,6 +52,40 @@ export interface DiagramSpec {
   edges: DiagramEdge[];
 }
 
+export type SceneChangeType =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed"
+  | "copied"
+  | "type-changed"
+  | "unknown";
+
+export const SCENE_CHANGE_TYPES: readonly SceneChangeType[] = [
+  "added",
+  "modified",
+  "deleted",
+  "renamed",
+  "copied",
+  "type-changed",
+  "unknown",
+];
+
+/**
+ * A changed file belonging to a scene, captured so the renderer is self-contained and
+ * never needs repository access.
+ */
+export interface SceneChange {
+  path: string;
+  oldPath?: string;
+  changeType: SceneChangeType;
+  language: string;
+  addedLines: number;
+  deletedLines: number;
+  isBinary: boolean;
+  isGenerated: boolean;
+}
+
 export interface ExplainerScene {
   id: string;
   title: string;
@@ -60,6 +94,7 @@ export interface ExplainerScene {
   visual: SceneVisual;
   sourceLocations: SourceLocation[];
   highlights: CodeHighlight[];
+  changes?: SceneChange[];
   diagramSpec?: DiagramSpec;
   narrationAudioPath?: string;
   narrationDurationMs?: number;

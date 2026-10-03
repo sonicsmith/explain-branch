@@ -1,6 +1,6 @@
 {
   "name": "explain-branch",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Analyse the current Git branch and produce a narrated explainer video of what changed.",
   "skills": "./skills/"
 }

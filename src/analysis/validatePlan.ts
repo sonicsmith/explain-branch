@@ -1,8 +1,10 @@
 import {
   PLAN_SCHEMA_VERSION,
+  SCENE_CHANGE_TYPES,
   SCENE_VISUALS,
   type ExplainerPlan,
   type ExplainerScene,
+  type SceneChange,
 } from "../planning/types.ts";
 import { relativePathError } from "../planning/paths.ts";
 import type { SourceSnapshot } from "./sourceSnapshot.ts";
@@ -35,6 +37,17 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isLineRange(start: unknown, end: unknown): boolean {
   return isPositiveInteger(start) && isPositiveInteger(end) && end >= start;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function isSceneChangeType(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    (SCENE_CHANGE_TYPES as readonly string[]).includes(value)
+  );
 }
 
 /**
@@ -213,6 +226,40 @@ function validateScene(
         );
       }
     });
+  }
+
+  if (scene.changes !== undefined) {
+    if (!Array.isArray(scene.changes)) {
+      add(`${path}.changes`, "changes must be an array");
+    } else {
+      (scene.changes as readonly unknown[]).forEach((raw, index) => {
+        const changePath = `${path}.changes[${index}]`;
+        const change = (raw ?? {}) as Partial<SceneChange>;
+
+        const changePathError = relativePathError(change.path ?? "");
+        if (changePathError !== null) {
+          add(`${changePath}.path`, changePathError);
+        }
+        if (!isSceneChangeType(change.changeType)) {
+          add(
+            `${changePath}.changeType`,
+            `changeType must be one of ${SCENE_CHANGE_TYPES.join(", ")}`,
+          );
+        }
+        if (!isNonEmptyString(change.language)) {
+          add(`${changePath}.language`, "language must be a non-empty string");
+        }
+        if (
+          !isNonNegativeInteger(change.addedLines) ||
+          !isNonNegativeInteger(change.deletedLines)
+        ) {
+          add(
+            changePath,
+            "addedLines/deletedLines must be non-negative integers",
+          );
+        }
+      });
+    }
   }
 
   if (scene.diagramSpec !== undefined) {

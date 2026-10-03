@@ -9,9 +9,10 @@ Produce a narrated explainer video that shows **what changed on the current bran
 the changed code works, and how it fits into the wider application** — like a developer
 walking another developer through a pull request.
 
-## Current status (Phase 2)
+## Current status (Phase 3)
 
-Branch inspection and scene planning are implemented; narration and rendering are **not**.
+Branch inspection, scene planning, and a **silent** video renderer are implemented.
+Narration and audio synchronization are not.
 
 Inspect the branch (read-only):
 
@@ -25,17 +26,22 @@ Build a validated scene plan (writes only `artifacts/branch-plan.json`):
 node "${PLUGIN_ROOT}/src/cli/planBranch.ts"
 ```
 
-Options for both: `--base <ref>`, `--include-working-tree`, `--repo <path>`. The inspector
-also takes `--json`; the planner takes `--out <path>`, `--max-scenes <n>`, `--stdout`.
-Exit code `2` means the base could not be determined and the user must choose one; exit
-code `3` means the generated plan failed validation.
+Render the video (Remotion entry point `src/render/index.ts`, composition `ExplainBranch`):
 
-Neither command modifies the repository: no checkout, reset, stash, or commit, no writes
-to `.git` or tracked files, and the only output file is the plan under `artifacts/`.
+```bash
+npx remotion render "${PLUGIN_ROOT}/src/render/index.ts" ExplainBranch artifacts/branch-explainer.mp4
+```
 
-If the user asks for a full explainer video, say plainly that narration and rendering are
-not implemented yet, and offer the scene plan instead. Do not claim a video was produced.
-produced.
+Options: `--base <ref>`, `--include-working-tree`, `--repo <path>` for the CLIs; `--json`
+for the inspector; `--out <path>`, `--max-scenes <n>`, `--stdout` for the planner. Exit
+code `2` means the base could not be determined and the user must choose one; exit code `3`
+means the generated plan failed validation.
+
+None of these modify the repository: no checkout, reset, stash, or commit, no writes to
+`.git` or tracked files, and all output lives under `artifacts/`.
+
+Rendering is currently silent and defaults to a fixture plan. Narration and end-to-end
+integration are not implemented yet, so do not claim a narrated video was produced.
 
 ## Workflow (target behaviour)
 

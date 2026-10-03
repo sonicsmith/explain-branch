@@ -220,6 +220,34 @@ test("respects the maxScenes budget and reports omissions", async (t) => {
   assert.equal(validatePlan(plan, { snapshot }).valid, true);
 });
 
+test("each scene carries a self-contained change list", async (t) => {
+  const repo = await makeFixtureRepo();
+  t.after(() => repo.cleanup());
+
+  const inventory = await buildChangeInventory({
+    repoPath: repo.dir,
+    base: "main",
+  });
+  const { plan, snapshot } = await buildPlan({
+    repositoryRoot: repo.dir,
+    inventory,
+    generatedAt: GENERATED_AT,
+  });
+
+  assert.equal(validatePlan(plan, { snapshot }).valid, true);
+
+  const codeScene = plan.scenes.find(
+    (scene) => scene.visual === "code-walkthrough",
+  );
+  assert.ok(codeScene?.changes && codeScene.changes.length > 0);
+  assert.ok(codeScene.changes.every((change) => change.path.length > 0));
+
+  const deleted = plan.scenes
+    .flatMap((scene) => scene.changes ?? [])
+    .find((change) => change.path === "src/legacy.ts");
+  assert.equal(deleted?.changeType, "deleted");
+});
+
 test("collectSymbols extracts declared names from added lines", () => {
   const files = parseUnifiedDiff(
     [

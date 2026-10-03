@@ -4,10 +4,11 @@ A Codex plugin/skill that analyses the current Git branch and produces a **narra
 explainer video** showing what changed, how the changed code works, and how it fits the
 wider application.
 
-> **Status: Phase 2 — branch inspection and scene planning implemented.** Narration and
-> rendering are not built yet. See [`plan/overview.md`](plan/overview.md) for the phased plan
-> and [`docs/adr/0001-tooling-decisions.md`](docs/adr/0001-tooling-decisions.md) for the
-> verified tooling decisions.
+> **Status: Phase 3 — branch inspection, scene planning, and a silent video renderer
+> implemented.** Narration and audio synchronization are not built yet. See
+> [`plan/overview.md`](plan/overview.md) for the phased plan and
+> [`docs/adr/0001-tooling-decisions.md`](docs/adr/0001-tooling-decisions.md) for the verified
+> tooling decisions.
 
 ## Layout
 
@@ -33,9 +34,19 @@ wider application.
 │   │   ├── types.ts                # versioned scene-plan schema
 │   │   ├── paths.ts                # path-safety checks
 │   │   └── buildPlan.ts            # deterministic planner
-│   └── cli/
-│       ├── explainBranch.ts        # Phase 1 inspection CLI
-│       └── planBranch.ts           # Phase 2 planning CLI
+│   ├── cli/
+│   │   ├── explainBranch.ts        # Phase 1 inspection CLI
+│   │   └── planBranch.ts           # Phase 2 planning CLI
+│   └── render/                     # Remotion compositions (Phase 3)
+│       ├── index.ts                # registerRoot entry point
+│       ├── Root.tsx                # composition + timeline metadata
+│       ├── ExplainerVideo.tsx      # scene sequencing
+│       ├── RenderInput.ts          # { plan, sources, options } contract
+│       ├── highlight.ts            # Shiki (fine-grained bundle)
+│       ├── theme.ts                # dark editor theme
+│       ├── components/             # CodeFrame, SceneChrome, ChangeList, ...
+│       ├── scenes/                 # code-walkthrough, diff, summary, architecture
+│       └── fixtures/sampleInput.ts # deterministic fixture plan
 ├── tests/                          # node:test suite + temp-repo fixtures
 ├── .agents/plugins/marketplace.json# repo marketplace for local testing
 ├── docs/adr/0001-tooling-decisions.md
@@ -57,7 +68,7 @@ npm install
 npm run inspect -- --base main      # human-readable summary (read-only)
 npm run inspect -- --json           # full structured inventory
 npm run inspect -- --include-working-tree
-npm test                            # 43 tests
+npm test                            # run the test suite
 npm run typecheck
 ```
 
@@ -79,6 +90,21 @@ and emits a versioned JSON plan matching `src/planning/types.ts`. Every referenc
 line range is verified against a read-only source snapshot before the plan is accepted
 (`src/analysis/validatePlan.ts`); generated files become omissions and honest caveats are
 attached. The plan is deterministic for a given inventory and timestamp.
+
+## Render a video
+
+```bash
+npm run browser:ensure              # one-time Chrome Headless Shell download
+npm run render:fixture              # artifacts/render-fixture.mp4 (silent, ~32s)
+npm run studio                      # interactive preview
+```
+
+The Remotion composition (`src/render/index.ts`, id `ExplainBranch`) receives a fully
+serializable `{ plan, sources, options }` input, so the video shows real captured code and
+never touches the repository while rendering. Code scenes are syntax-highlighted with Shiki
+(fine-grained bundle, JavaScript engine — no wasm fetch), scroll to the discussed lines and
+fade in highlight bands; deletions render as diff summaries; the closing scene summarises
+the branch, its omissions, and caveats.
 
 ## Run the placeholder skeleton
 
@@ -104,12 +130,12 @@ been exercised in a live Codex client (none is installed here). To verify:
 
 ## Roadmap
 
-| Phase        | Deliverable                              |
-| ------------ | ---------------------------------------- |
-| **0 (done)** | ADR + invocable plugin skeleton          |
-| **1 (done)** | Tested branch-inspection CLI (read-only) |
-| **2 (done)** | Validated scene plan JSON                |
-| 3            | Serviceable silent video renderer        |
-| 4            | Narration + synchronization              |
-| 5            | End-to-end integration via the skill     |
-| 6            | Quality, robustness, docs                |
+| Phase        | Deliverable                                |
+| ------------ | ------------------------------------------ |
+| **0 (done)** | ADR + invocable plugin skeleton            |
+| **1 (done)** | Tested branch-inspection CLI (read-only)   |
+| **2 (done)** | Validated scene plan JSON                  |
+| **3 (done)** | Silent video renderer + Shiki highlighting |
+| 4            | Narration + synchronization                |
+| 5            | End-to-end integration via the skill       |
+| 6            | Quality, robustness, docs                  |

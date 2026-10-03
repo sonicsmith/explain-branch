@@ -13,6 +13,7 @@ import {
   type ExplainerPlan,
   type ExplainerScene,
   type PlanOmission,
+  type SceneChange,
   type SceneVisual,
   type SourceLocation,
 } from "./types.ts";
@@ -246,6 +247,19 @@ function buildHighlights(
   return highlights;
 }
 
+function toSceneChange(file: InventoryFile): SceneChange {
+  return {
+    path: file.path,
+    oldPath: file.oldPath ?? undefined,
+    changeType: file.changeType,
+    language: file.language,
+    addedLines: file.addedLineCount,
+    deletedLines: file.deletedLineCount,
+    isBinary: file.isBinary,
+    isGenerated: file.isGenerated,
+  };
+}
+
 function buildGroupNarration(group: Group): string {
   const files = group.files;
   const sentences: string[] = [
@@ -279,6 +293,7 @@ function buildGroupScene(
     visual: chooseVisual(group.files),
     sourceLocations: locations,
     highlights: buildHighlights(group.files, locations),
+    changes: group.files.map(toSceneChange),
   };
 }
 
@@ -338,6 +353,7 @@ function buildSummaryScene(
     visual: "summary",
     sourceLocations: [],
     highlights: [],
+    changes: [],
   };
 }
 
