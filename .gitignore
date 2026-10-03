@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+
+# Pipeline artifacts (render output, plan JSON, narration audio, snapshots)
+artifacts/
+
+# Remotion cache (Chrome Headless Shell lives under node_modules/.remotion)
+.remotion/
+
+# macOS
+.DS_Store
+
+# Logs / local env
+*.log
+.env
+.env.*
+!.env.example

@@ -1,0 +1,33 @@
+{
+  "name": "explain-branch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex plugin that turns the current Git branch into a narrated explainer video.",
+  "license": "MIT",
+  "scripts": {
+    "hello": "node skills/explain-branch/scripts/hello.ts",
+    "inspect": "node src/cli/explainBranch.ts",
+    "test": "node --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "browser:ensure": "remotion browser ensure",
+    "studio": "remotion studio"
+  },
+  "dependencies": {
+    "openai": "^7.27.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.532",
+    "shiki": "^4.5.0"
+  },
+  "devDependencies": {
+    "@remotion/bundler": "4.0.532",
+    "@remotion/cli": "4.0.532",
+    "@remotion/renderer": "4.0.532",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

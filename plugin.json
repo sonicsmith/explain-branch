@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "explain-branch",
+  "version": "0.1.0",
+  "description": "Analyse the current Git branch and produce a narrated explainer video of what changed, how it works, and how it fits the wider application.",
+  "license": "MIT",
+  "keywords": [
+    "git",
+    "branch",
+    "code-review",
+    "explainer",
+    "video",
+    "remotion"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Explain Branch",
+        "shortDescription": "Turn the current Git branch into a narrated code walkthrough video.",
+        "longDescription": "Explains the current branch relative to a resolved base: what changed, how the changed code works, and how it fits the wider application, rendered as an MP4 with synchronized voice narration.",
+        "developerName": "explain-branch",
+        "category": "Productivity",
+        "capabilities": ["Read"]
+      }
+    }
+  }
+}
