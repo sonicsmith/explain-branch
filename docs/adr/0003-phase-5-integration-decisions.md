@@ -4,8 +4,9 @@
 - **Date:** 2026-10-04
 - **Phase:** 5 (End-to-end integration) — see [`plan/phase-5.md`](../../plan/phase-5.md)
 - **Scope:** Records the §1 (orchestrator entry point), §2 (configuration surface and
-  precedence), §3 (progress reporting and stdout/stderr split), and §4 (error handling, exit
-  codes, and recoverability) decisions. Later sections are recorded here as they land.
+  precedence), §3 (progress reporting and stdout/stderr split), §4 (error handling, exit codes,
+  and recoverability), and §5 (output management and the run report) decisions. Later sections
+  are recorded here as they land.
 
 ## Context
 
@@ -88,9 +89,9 @@ carries only the final machine-readable result.
 - **Stage banners** `[1/5] … [5/5]` are written to stderr, as are narration `onProgress`
   events (`generating` / `retrying` / `cached` / …), the render line, warnings, and the human
   "Rendered: …" summary.
-- **stdout contract:** the output path on success; the scene-plan JSON with `--stdout`; a small
-  JSON summary (`dryRun`, `scenes`, `totalCharacters`, `estimatedCostUsd`, `costBasis`) with
-  `--dry-run`. These will be superseded by the §5 run report.
+- **stdout contract:** the run report JSON on success (see Decision 5); the scene-plan JSON
+  with `--stdout`; a small JSON summary (`dryRun`, `scenes`, `totalCharacters`,
+  `estimatedCostUsd`, `costBasis`) with `--dry-run`.
 - **Remotion's own output** is forwarded to stderr (`stdio: ["inherit", process.stderr,
 process.stderr]`), so the renderer cannot pollute stdout.
 - **Dry-run** lines are prefixed `[dry run]` so they are never mistaken for a real render.
@@ -128,6 +129,36 @@ the live progress on stderr.
 **Rationale.** Codes are stable and already used by the stage CLIs; recoverability (kept
 artifacts + cached clips) makes failures resumable without re-billing, and the assertion backs
 the read-only guarantee with a runtime check.
+
+## Decision 5 — Output management and the run report (§5)
+
+**Decision.** Every run produces a stable, self-describing set of artifacts under the run
+directory, and a machine-readable report is the CLI's stdout result.
+
+- **No silent overwrite.** The MP4 goes through `resolveOutputPath`: without `--overwrite` a
+  collision yields a timestamped path and a notice; Remotion is also passed `--overwrite=false`.
+- **Artifacts alongside the video** (§14.9), all in `<run-dir>/`:
+  - `plan.json` — the validated, narrated (redacted) plan,
+  - `narration.txt` — the narration script (title + per-scene narration text),
+  - `render-input.json` — exactly what was passed to the renderer,
+  - `audio/<scene>.<fmt>` — the clips,
+  - `report.json` — the run report (below),
+  - plus `branch-plan.json` as the pre-narration resume checkpoint.
+- **Run report** (`src/pipeline/report.ts`, `REPORT_SCHEMA_VERSION = 1`) records: schema
+  version + timestamp; branch, HEAD, base (ref/source/merge-base); working-tree state and
+  whether it was included; scene count; narration provider/model/voice/format; per-scene clips
+  (audio path + measured duration); total narration and video durations; the MP4 path + byte
+  size; plan omissions and caveats; redactions applied; the cost estimate; and the artifact
+  paths. It is written to `<run-dir>/report.json` **and** printed to stdout; the same summary is
+  rendered human-readably to stderr (`formatReportSummary`).
+- **Success requires a real file.** After the renderer exits 0 the orchestrator verifies the
+  MP4 exists and is non-empty (`verifyRenderedVideo`); a missing/zero-byte file is treated as a
+  render failure (exit 1) with the plan/clips kept for resume.
+- **Omissions, caveats, and redactions are surfaced** both in the report and the stderr summary.
+
+**Rationale.** A single versioned report makes the run inspectable and machine-consumable, the
+narration script and plan travel with the video, and verifying the output prevents a
+false-success when the renderer writes nothing.
 
 ---
 

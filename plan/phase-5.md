@@ -133,16 +133,16 @@ directory contract.
 
 ## 5. Output management and the run report
 
-- [ ] Write the final MP4 through `resolveOutputPath`; without `--overwrite`, a collision
+- [x] Write the final MP4 through `resolveOutputPath`; without `--overwrite`, a collision
       produces a timestamped path and a notice — never a silent replace (§2/§15).
-- [ ] Save the required artifacts **alongside** the video (§14.9): the validated plan JSON,
+- [x] Save the required artifacts **alongside** the video (§14.9): the validated plan JSON,
       the narration script, and the `render-input.json` used, all inside the run directory.
-- [ ] Write a machine-readable **run report** (`<run-dir>/report.json`) recording: branch, base + source, commit, whether working tree was included, scene count, per-scene audio path +
+- [x] Write a machine-readable **run report** (`<run-dir>/report.json`) recording: branch, base + source, commit, whether working tree was included, scene count, per-scene audio path +
       duration, total duration, MP4 path + size, omitted changes, caveats, redactions applied,
       and the cost estimate. Print the same summary to stdout and the human summary to stderr.
-- [ ] Report material **omissions and caveats** from the plan (§14.10) and any redactions the
+- [x] Report material **omissions and caveats** from the plan (§14.10) and any redactions the
       narration pre-flight applied.
-- [ ] Verify the rendered MP4 exists and is non-empty before reporting success; treat a missing
+- [x] Verify the rendered MP4 exists and is non-empty before reporting success; treat a missing
       or zero-byte output as a render failure.
 
 **Decision to record:** report schema/version and which artifacts are always written.

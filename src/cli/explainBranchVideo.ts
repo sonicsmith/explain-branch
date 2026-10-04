@@ -37,12 +37,20 @@ import { validateNarratedPlan } from "../narration/validateNarration.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
 import { readConfiguredMaxScenes } from "../pipeline/projectConfig.ts";
 import {
+  buildRunReport,
+  formatReportSummary,
+  verifyRenderedVideo,
+  writeNarrationScript,
+  writeRunReport,
+} from "../pipeline/report.ts";
+import {
   PlanValidationError,
   resolveRunDir,
   runInspect,
   runNarrate,
   runPlan,
   runRender,
+  type NarrateStageResult,
 } from "../pipeline/stages.ts";
 
 interface CliOptions {
@@ -96,10 +104,12 @@ Options:
   -h, --help               Show this help
 
 Artifacts are written under the run directory: branch-plan.json, plan.json (narrated),
-audio/<scene>.wav, and render-input.json. Narration requires OPENAI_API_KEY.
+narration.txt, audio/<scene>.wav, render-input.json, and report.json. Narration requires
+OPENAI_API_KEY.
 
 Progress and pre-flight disclosure are written to stderr; stdout carries only the final
-result (the output path; the plan JSON with --stdout; a JSON summary with --dry-run).
+machine-readable result (the run report JSON; the plan JSON with --stdout; a JSON summary
+with --dry-run).
 
 Defaults can be set per repository in .explain-branch.json or package.json
 (`explainBranch`): `base`, `maxScenes`, and `narration`. Precedence for narration is
@@ -405,6 +415,7 @@ async function main(): Promise<void> {
     );
 
     let narratedPlan: ExplainerPlan | null = null;
+    let narrateResult: NarrateStageResult | null = null;
 
     if (!options.force && !options.dryRun) {
       narratedPlan = await tryResumeNarratedPlan(planPath, repositoryRoot);
@@ -451,6 +462,7 @@ async function main(): Promise<void> {
         onProgress: (event) => log(formatProgress(event)),
         log,
       });
+      narrateResult = narrate;
 
       if (narrate.dryRun) {
         for (const clip of narrate.clips) {
@@ -498,6 +510,9 @@ async function main(): Promise<void> {
       narratedPlan = narrate.plan;
     }
 
+    // Save the narration script alongside the plan and render input (§14.9).
+    const narrationScriptPath = await writeNarrationScript(runDir, narratedPlan);
+
     log("[4/5] Rendering the video...");
     const render = await runRender({
       repositoryRoot,
@@ -518,10 +533,43 @@ async function main(): Promise<void> {
       return;
     }
 
+    // A successful renderer exit is not enough: confirm the MP4 exists and is non-empty.
+    const videoBytes = await verifyRenderedVideo(render.outPath);
+    if (videoBytes === null) {
+      console.error(
+        `error: the renderer reported success but ${render.outPath} is missing or empty. Treating this as a render failure; the plan and audio clips were kept under ${runDir}.`,
+      );
+      if (context !== null) await verifyRepositoryUnchanged(context);
+      process.exitCode = 1;
+      return;
+    }
+
+    const report = buildRunReport({
+      inventory,
+      plan: narratedPlan,
+      workingTreeIncluded: options.includeWorkingTree,
+      config,
+      ...(narrateResult !== null
+        ? {
+            cost: narrateResult.costEstimate,
+            redaction: narrateResult.redaction,
+          }
+        : {}),
+      video: { path: render.outPath, bytes: videoBytes },
+      artifacts: {
+        runDir,
+        planJson: planPath,
+        narrationScript: narrationScriptPath,
+        renderInput: render.renderInputPath,
+      },
+    });
+    const reportPath = await writeRunReport(runDir, report);
+
     log("[5/5] Done.");
-    log(`Rendered: ${render.outPath}`);
-    // stdout carries only the final result (the output path); chatter stays on stderr.
-    process.stdout.write(`${render.outPath}\n`);
+    log(formatReportSummary(report));
+    log(`Report:    ${reportPath}`);
+    // stdout carries only the machine-readable report; human chatter stays on stderr.
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } catch (error) {
     reportError(error);
     if (context !== null) {
