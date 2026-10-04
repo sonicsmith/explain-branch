@@ -274,9 +274,37 @@ render never clobbers the first without an explicit flag.
 
 ---
 
+## Decision 6 — Privacy and secret redaction
+
+**Decision.**
+
+- **What is transmitted:** only the per-scene narration text (derived from the diff) is sent to
+  the configured TTS provider (OpenAI by default). Source files, the plan, and credentials are
+  not uploaded beyond the narration currently being spoken.
+- **Pre-flight redaction:** `redactPlanNarration()` runs before narration (and before the plan
+  is written or rendered), replacing secret-looking values with `[REDACTED:<kind>]` markers and
+  reporting what was filtered. Rules, specific before generic: OpenAI keys (`sk-…`), GitHub
+  tokens (`ghp_…`/`github_pat_…`), Slack tokens (`xox…-`), AWS access keys (`AKIA…`), Google API
+  keys (`AIza…`), `Bearer` tokens, PEM private-key blocks, URLs with embedded credentials,
+  `*KEY|TOKEN|SECRET|PASSWORD|…=value` assignments, and long high-entropy runs (≥ 32 chars
+  containing a digit). Redaction is conservative — over-redaction beats leaking a credential.
+- **API keys never persist:** `OPENAI_API_KEY` is read from the environment only, used solely to
+  construct the SDK client, and never written to the plan, logs, captions, video, or sidecars.
+  `redactSecret()` exists for safe logging.
+- **AI-voice disclosure:** the README states that narration is AI-generated, per OpenAI's usage
+  policy.
+
+**Implemented in** `src/narration/redact.ts` (wired into `src/cli/narrateBranch.ts`) and the
+README's "Privacy and AI-voice disclosure" section.
+
+**Consequences.** Redaction can alter narration wording when the high-entropy rule trips; the
+report makes that visible. It is a safety net, not a guarantee — code frames still show raw
+repository content.
+
+---
+
 ## Decisions pending
 
 Recorded here as their tasks are implemented:
 
-- §6 — what is transmitted, and the redaction rules applied first.
 - §7 — how the TTS provider is abstracted so tests need no network.

@@ -4,11 +4,11 @@ A Codex plugin/skill that analyses the current Git branch and produces a **narra
 explainer video** showing what changed, how the changed code works, and how it fits the
 wider application.
 
-> **Status: Phase 3 — branch inspection, scene planning, and a silent video renderer
-> implemented.** Narration and audio synchronization are not built yet. See
-> [`plan/overview.md`](plan/overview.md) for the phased plan and
-> [`docs/adr/0001-tooling-decisions.md`](docs/adr/0001-tooling-decisions.md) for the verified
-> tooling decisions.
+> **Status: Phase 4 — narration, audio-driven timing, and captions implemented.** Branch
+> inspection, scene planning, and the Remotion renderer (now narrated) are in place; the
+> final test/typecheck pass and the manual narrated smoke render are pending. See
+> [`plan/overview.md`](plan/overview.md) and
+> [`docs/adr/0002-phase-4-narration-decisions.md`](docs/adr/0002-phase-4-narration-decisions.md).
 
 ## Layout
 
@@ -36,11 +36,24 @@ wider application.
 │   │   └── buildPlan.ts            # deterministic planner
 │   ├── cli/
 │   │   ├── explainBranch.ts        # Phase 1 inspection CLI
-│   │   └── planBranch.ts           # Phase 2 planning CLI
-│   └── render/                     # Remotion compositions (Phase 3)
+│   │   ├── planBranch.ts           # Phase 2 planning CLI
+│   │   └── narrateBranch.ts        # Phase 4 narration CLI
+│   ├── narration/                  # Phase 4 text-to-speech narration
+│   │   ├── config.ts               # provider/model/voice/format configuration
+│   │   ├── credentials.ts          # OPENAI_API_KEY handling
+│   │   ├── narratePlan.ts          # per-scene clips + cache
+│   │   ├── duration.ts / wav.ts    # duration measurement
+│   │   ├── retry.ts                # backoff for transient failures
+│   │   ├── redact.ts               # pre-flight secret redaction
+│   │   └── validateNarration.ts    # plan + audio validation
+│   └── render/                     # Remotion compositions (Phase 3+4)
 │       ├── index.ts                # registerRoot entry point
 │       ├── Root.tsx                # composition + timeline metadata
 │       ├── ExplainerVideo.tsx      # scene sequencing
+│       ├── timeline.ts             # narration-driven scene timing
+│       ├── captions.ts             # proportional per-sentence captions
+│       ├── audioSource.ts          # clip -> staticFile()/URL resolution
+│       ├── outputPath.ts           # never-overwrite output paths
 │       ├── RenderInput.ts          # { plan, sources, options } contract
 │       ├── highlight.ts            # Shiki (fine-grained bundle)
 │       ├── theme.ts                # dark editor theme
@@ -106,6 +119,35 @@ never touches the repository while rendering. Code scenes are syntax-highlighted
 fade in highlight bands; deletions render as diff summaries; the closing scene summarises
 the branch, its omissions, and caveats.
 
+## Narrate a video
+
+```bash
+export OPENAI_API_KEY=sk-...          # required; read from the environment only
+npm run narrate                       # writes artifacts/<branch>/plan.json + audio clips
+npm run narrate -- --dry-run          # scenes, character counts, estimated cost (no API calls)
+npm run narrate -- --scene scene-2    # regenerate a single clip
+npm run narrate -- --force            # regenerate every clip
+npm run render:narrated -- --props=artifacts/<branch>/plan.json
+```
+
+`npm run narrate` generates one audio clip per scene, measures each clip's real duration, and
+writes a plan whose scene lengths are driven by that audio. Clips are cached, so re-running
+skips unchanged scenes and a failed render resumes without re-billing. Missing or rejected
+credentials stop with a clear message and a non-zero exit. Rendering audio requires
+`--public-dir` pointing at the repository root so Remotion can serve the clips.
+
+### Privacy and AI-voice disclosure
+
+- **What is sent:** the narration text for each scene (derived from the diff) is transmitted to
+  the configured TTS provider (OpenAI by default). Nothing else is uploaded.
+- **Secret redaction:** a pre-flight filter replaces secret-looking values (API keys, tokens,
+  `.env`-style assignments, private keys, credentials in URLs) with `[REDACTED:…]` markers
+  before they can become narration; what was filtered is reported to stderr.
+- **API keys:** `OPENAI_API_KEY` is read from the environment only and is never written to the
+  plan, logs, captions, or video.
+- **AI voice:** narration is synthetic. Per OpenAI's usage policy, the voice you hear is
+  **AI-generated, not a human voice**.
+
 ## Run the placeholder skeleton
 
 ```bash
@@ -130,12 +172,12 @@ been exercised in a live Codex client (none is installed here). To verify:
 
 ## Roadmap
 
-| Phase        | Deliverable                                |
-| ------------ | ------------------------------------------ |
-| **0 (done)** | ADR + invocable plugin skeleton            |
-| **1 (done)** | Tested branch-inspection CLI (read-only)   |
-| **2 (done)** | Validated scene plan JSON                  |
-| **3 (done)** | Silent video renderer + Shiki highlighting |
-| 4            | Narration + synchronization                |
-| 5            | End-to-end integration via the skill       |
-| 6            | Quality, robustness, docs                  |
+| Phase           | Deliverable                                |
+| --------------- | ------------------------------------------ |
+| **0 (done)**    | ADR + invocable plugin skeleton            |
+| **1 (done)**    | Tested branch-inspection CLI (read-only)   |
+| **2 (done)**    | Validated scene plan JSON                  |
+| **3 (done)**    | Silent video renderer + Shiki highlighting |
+| 4 (in progress) | Narration + synchronization                |
+| 5               | End-to-end integration via the skill       |
+| 6               | Quality, robustness, docs                  |

@@ -155,12 +155,16 @@ defaults.
 
 ## 6. Privacy and secrets
 
-- [ ] Document plainly that narration text (derived from repository content) is transmitted to
+- [x] Document plainly that narration text (derived from repository content) is transmitted to
       the configured TTS provider.
-- [ ] Add a pre-flight filter that skips/redacts secret-looking values (keys, tokens, `.env`
+      → README "Privacy and AI-voice disclosure"; runtime notice + `--help` note in [`../src/cli/narrateBranch.ts`](../src/cli/narrateBranch.ts); ADR 0002 (Decision 6).
+- [x] Add a pre-flight filter that skips/redacts secret-looking values (keys, tokens, `.env`
       content) before they can become narration text, and report what was filtered.
-- [ ] Confirm API keys never reach the scene plan, the logs, the rendered video, or captions.
-- [ ] Note the AI-voice disclosure requirement in the README.
+      → [`../src/narration/redact.ts`](../src/narration/redact.ts) (`redactPlanNarration`), wired into the narrate CLI; ADR 0002 (Decision 6).
+- [x] Confirm API keys never reach the scene plan, the logs, the rendered video, or captions.
+      → `OPENAI_API_KEY` used only to build the SDK client; `redactSecret()` for safe logging; audited; ADR 0002 (Decision 6).
+- [x] Note the AI-voice disclosure requirement in the README.
+      → README "Privacy and AI-voice disclosure"; ADR 0002 (Decision 6).
 
 **Decision to record:** what is transmitted, and the redaction rules applied first.
 

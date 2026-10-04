@@ -29,6 +29,7 @@ import {
 } from "../narration/narratePlan.ts";
 import { createOpenAiSpeechProvider } from "../narration/openaiSpeechProvider.ts";
 import { NarrationError, type SpeechProvider } from "../narration/provider.ts";
+import { redactPlanNarration } from "../narration/redact.ts";
 import { validateNarratedPlan } from "../narration/validateNarration.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
 
@@ -214,6 +215,23 @@ async function main(): Promise<void> {
       return;
     }
 
+    // Pre-flight: redact secret-looking values before they can leave the machine, and report
+    // what was filtered. The redacted plan is what gets narrated, written, and rendered.
+    const redaction = redactPlanNarration(plan);
+    if (redaction.totalRedactions > 0) {
+      console.error(
+        `Redacted ${redaction.totalRedactions} secret-looking value(s) from narration before it could be sent to the provider:`,
+      );
+      for (const report of redaction.reports) {
+        console.error(
+          `  ${report.sceneId}: ${report.redactions
+            .map((entry) => `${entry.kind} x${entry.count}`)
+            .join(", ")}`,
+        );
+      }
+    }
+    plan = redaction.plan;
+
     const { config } = await resolveNarrationConfig({
       repositoryRoot,
       overrides: options.overrides,
@@ -245,6 +263,9 @@ async function main(): Promise<void> {
       provider = createOpenAiSpeechProvider({ apiKey });
     }
 
+    console.error(
+      `Narration text is derived from repository content and will be sent to the ${config.provider} TTS provider${options.dryRun ? " (dry run: nothing is sent)" : ""}.`,
+    );
     console.error(
       `Narrating ${plan.scenes.length} scene(s) with ${config.model} (${config.voice}, ${config.format})${options.dryRun ? " [dry run]" : ""}.`,
     );
