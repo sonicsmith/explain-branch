@@ -21,17 +21,22 @@ function ascii(bytes: Uint8Array, offset: number, length: number): string {
   return value;
 }
 
+/** True when the bytes begin with a RIFF/WAVE header. */
+export function isWav(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    ascii(bytes, 0, 4) === "RIFF" &&
+    ascii(bytes, 8, 4) === "WAVE"
+  );
+}
+
 /**
  * Parses a RIFF/WAVE header and returns its format plus duration in integer milliseconds.
  * Tolerates extra chunks and odd-sized chunks (which carry a padding byte). Throws
  * {@link NarrationError} when the bytes are not a parseable PCM WAV.
  */
 export function readWavInfo(bytes: Uint8Array): WavInfo {
-  if (
-    bytes.length < 12 ||
-    ascii(bytes, 0, 4) !== "RIFF" ||
-    ascii(bytes, 8, 4) !== "WAVE"
-  ) {
+  if (!isWav(bytes)) {
     throw new NarrationError(
       "Not a RIFF/WAVE file; cannot read the audio duration.",
     );

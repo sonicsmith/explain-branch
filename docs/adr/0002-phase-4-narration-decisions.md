@@ -170,11 +170,44 @@ in `wav.ts`, and cost/`--dry-run` estimation in `estimate.ts`. The CLI entry poi
 
 ---
 
+## Decision 3 — Duration measurement and the timeline model
+
+**Decision.**
+
+- **Duration source of truth:** each scene's `narrationDurationMs` (integer ms), written by the
+  narration stage. Silent scenes have no value and fall back to `secondsPerScene`.
+- **Measurement:** WAV is read directly from the RIFF header (no dependency, no decode). Non-WAV
+  clips fall back to FFprobe via Remotion's bundled binary
+  (`RenderInternals.callFf({ bin: "ffprobe", ... })`, auto-downloaded into
+  `node_modules/.remotion`). The runner is imported dynamically so the WAV path never pulls in
+  `@remotion/renderer`; the deprecated `getVideoMetadata` helper is avoided.
+- **Timeline:** `sceneMs = leadInMs + narrationDurationMs + tailMs`, plus `gapMs` for scenes after
+  the first, clamped to `minSceneMs`. Silent scenes use `secondsPerScene`.
+- **Rounding rule (a single rule):** `frames = max(1, ceil(sceneMs / 1000 × fps))`, applied per
+  scene. `ceil` guarantees no truncation, and `durationInFrames` is the **sum** of the scene
+  frames, so `sum(sceneFrames) === durationInFrames` holds exactly.
+- **Gap:** folded into the length of scenes after the first, so the sum identity holds without a
+  separate gap element.
+- **Defaults:** `leadInMs = 500`, `tailMs = 750`, `gapMs = 250`, `minSceneMs = 2000`.
+- **Assertion:** `buildTimeline` asserts the sum identity and that every narrated scene lasts at
+  least its narration plus the tail, throwing on violation.
+- **Renderer wiring:** `RenderInput` exposes `resolveTimelineOptions` / `buildRenderTimeline`;
+  both `totalDurationInFrames` and `ExplainerVideo` use it, and `calculateMetadata` stays
+  authoritative for `durationInFrames`, `fps`, and dimensions so `--props` renders match.
+
+**Implemented in** `src/render/timeline.ts`, `src/narration/duration.ts`, and
+`src/render/RenderInput.ts`.
+
+**Consequences.** The fixture (no narration) still renders 32 s at 30 fps, while narrated plans
+now get per-scene lengths derived from real audio. Non-WAV formats work, but need Remotion's
+FFprobe to be downloadable on first use.
+
+---
+
 ## Decisions pending
 
 Recorded here as their tasks are implemented:
 
-- §3 — duration source of truth, rounding rule, lead-in/tail/gap defaults.
 - §4 — audio asset resolution strategy, caption timing approach.
 - §5 — retry policy, TTS concurrency limit, overwrite rule.
 - §6 — what is transmitted, and the redaction rules applied first.

@@ -7,7 +7,10 @@ import { validatePlan } from "../../src/analysis/validatePlan.ts";
 import { snapshotFromContents } from "../../src/analysis/sourceSnapshot.ts";
 import { FakeSpeechProvider } from "../../src/narration/fakeSpeechProvider.ts";
 import { narratePlan } from "../../src/narration/narratePlan.ts";
-import { NarrationError } from "../../src/narration/provider.ts";
+import {
+  NarrationError,
+  type SpeechProvider,
+} from "../../src/narration/provider.ts";
 import {
   DEFAULT_NARRATION_CONFIG,
   type NarrationConfig,
@@ -215,18 +218,55 @@ test("fails loudly when narration exceeds the request character limit", async ()
   }
 });
 
-test("rejects a non-wav format until duration measurement supports it", async () => {
+test("uses the WAV header fast path even when the format is not wav", async () => {
   const dir = await tempDir();
   try {
+    // The fake provider returns real WAV bytes; magic-byte detection wins over the label.
     const provider = new FakeSpeechProvider();
     const config: NarrationConfig = {
       ...DEFAULT_NARRATION_CONFIG,
       format: "mp3",
     };
-    await assert.rejects(
-      narratePlan({ ...baseOptions(dir, config), provider }),
-      /not implemented yet/,
-    );
+    let ffprobeCalled = false;
+    const result = await narratePlan({
+      ...baseOptions(dir, config),
+      provider,
+      ffprobe: async () => {
+        ffprobeCalled = true;
+        return 1;
+      },
+    });
+    assert.ok(result.clips.every((clip) => clip.durationMs > 0));
+    assert.equal(ffprobeCalled, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("measures non-WAV clips with the injected FFprobe fallback", async () => {
+  const dir = await tempDir();
+  try {
+    const provider: SpeechProvider = {
+      async synthesize() {
+        return new Uint8Array([0x49, 0x44, 0x33, 0x04]); // "ID3"-prefixed bytes
+      },
+    };
+    const config: NarrationConfig = {
+      ...DEFAULT_NARRATION_CONFIG,
+      format: "mp3",
+    };
+    const probed: string[] = [];
+    const result = await narratePlan({
+      ...baseOptions(dir, config),
+      provider,
+      ffprobe: async (filePath) => {
+        probed.push(filePath);
+        return 4321;
+      },
+    });
+    assert.equal(probed.length, 2);
+    assert.ok(probed.every((filePath) => filePath.endsWith(".mp3")));
+    assert.ok(result.clips.every((clip) => clip.durationMs === 4321));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

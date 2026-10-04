@@ -22,6 +22,7 @@ import {
   countSpeechCharacters,
   MAX_SPEECH_INPUT_CHARACTERS,
 } from "./limits.ts";
+import { measureAudioDurationMs, type FFprobeRunner } from "./duration.ts";
 import { NarrationError, type SpeechProvider } from "./provider.ts";
 import type { NarrationConfig } from "./types.ts";
 import { readWavDurationMs } from "./wav.ts";
@@ -83,6 +84,8 @@ export interface NarratePlanOptions {
   /** Only (re)generate these scene ids; leave the rest untouched. */
   sceneIds?: readonly string[];
   dryRun?: boolean;
+  /** Injected FFprobe runner used for non-WAV clips (offline tests). */
+  ffprobe?: FFprobeRunner;
   /** Injected for deterministic tests. */
   now?: () => Date;
   onProgress?: (event: NarrationProgressEvent) => void;
@@ -102,15 +105,6 @@ export function audioFileName(sceneId: string, format: string): string {
     .replace(/[^A-Za-z0-9._-]+/g, "-")
     .replace(/^[-.]+|[-.]+$/g, "");
   return `${safe === "" ? "scene" : safe}.${format}`;
-}
-
-function measureDurationMs(bytes: Uint8Array, format: string): number {
-  if (format !== "wav") {
-    throw new NarrationError(
-      `Duration measurement for "${format}" clips is not implemented yet; use the "wav" format.`,
-    );
-  }
-  return readWavDurationMs(bytes);
 }
 
 function validatePlanScenes(plan: ExplainerPlan): void {
@@ -309,8 +303,11 @@ export async function narratePlan(
       );
     }
 
-    const durationMs = measureDurationMs(bytes, config.format);
     await writeFile(absolutePath, bytes);
+    const durationMs = await measureAudioDurationMs(absolutePath, {
+      bytes,
+      ...(options.ffprobe !== undefined ? { ffprobe: options.ffprobe } : {}),
+    });
 
     const metadata: ClipMetadata = {
       cacheKey,

@@ -85,20 +85,26 @@ the cache key.
 
 ## 3. Duration measurement and the timeline model
 
-- [ ] Measure each clip's duration and store it as `narrationDurationMs` (integer ms).
-- [ ] Prefer reading the **WAV header** (no dependency, no decode); fall back to FFprobe for
+- [x] Measure each clip's duration and store it as `narrationDurationMs` (integer ms).
+      → [`../src/narration/narratePlan.ts`](../src/narration/narratePlan.ts) (rounded to integer ms).
+- [x] Prefer reading the **WAV header** (no dependency, no decode); fall back to FFprobe for
       other formats. Confirm Remotion's bundled FFprobe is available for that fallback
       (`node_modules/.remotion`), and decide whether to use `@remotion/renderer`'s helper or a
       direct `ffprobe` invocation.
-- [ ] Define the timeline: `sceneMs = leadInMs + narrationDurationMs + tailMs`, with a
+      → [`../src/narration/duration.ts`](../src/narration/duration.ts); Remotion's bundled FFprobe via `RenderInternals.callFf`; ADR 0002 (Decision 3).
+- [x] Define the timeline: `sceneMs = leadInMs + narrationDurationMs + tailMs`, with a
       configurable minimum scene length and an optional inter-scene gap. Convert to frames
       consistently (one rounding rule) so total duration is exact.
-- [ ] Decide the rounding policy and assert that `sum(sceneFrames) === durationInFrames` and
+      → [`../src/render/timeline.ts`](../src/render/timeline.ts); ADR 0002 (Decision 3).
+- [x] Decide the rounding policy and assert that `sum(sceneFrames) === durationInFrames` and
       that no narration is cut off (scene length ≥ clip length + tail).
-- [ ] Update the renderer's timing so per-scene length comes from `narrationDurationMs` when
+      → `ceil` per scene; `assertTimelineConsistent` in [`../src/render/timeline.ts`](../src/render/timeline.ts); ADR 0002 (Decision 3).
+- [x] Update the renderer's timing so per-scene length comes from `narrationDurationMs` when
       present, falling back to `options.secondsPerScene` for silent/un-narrated scenes.
-- [ ] Keep `calculateMetadata` authoritative for `durationInFrames`, `fps`, and dimensions so
+      → `buildRenderTimeline` in [`../src/render/RenderInput.ts`](../src/render/RenderInput.ts); used by [`../src/render/ExplainerVideo.tsx`](../src/render/ExplainerVideo.tsx).
+- [x] Keep `calculateMetadata` authoritative for `durationInFrames`, `fps`, and dimensions so
       `--props` renders match the timeline.
+      → [`../src/render/Root.tsx`](../src/render/Root.tsx) (via `totalDurationInFrames(props)`).
 
 **Decision to record:** duration source of truth, rounding rule, and the lead-in/tail/gap
 defaults.
