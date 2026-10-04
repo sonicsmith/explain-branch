@@ -389,7 +389,9 @@ function runRemotion(args: readonly string[], cwd: string): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [REMOTION_CLI, ...args], {
       cwd,
-      stdio: "inherit",
+      // Keeps the CLI's stdout reserved for its final result: Remotion's own progress and
+      // logs (including its stdout) are forwarded to our stderr.
+      stdio: ["inherit", process.stderr, process.stderr],
     });
     child.on("close", (code) => resolve(code ?? 1));
     child.on("error", () => resolve(1));

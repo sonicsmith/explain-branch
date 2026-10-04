@@ -3,8 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-10-04
 - **Phase:** 5 (End-to-end integration) — see [`plan/phase-5.md`](../../plan/phase-5.md)
-- **Scope:** Records the §1 (orchestrator entry point) and §2 (configuration surface and
-  precedence) decisions. Later sections are recorded here as they land.
+- **Scope:** Records the §1 (orchestrator entry point), §2 (configuration surface and
+  precedence), and §3 (progress reporting and stdout/stderr split) decisions. Later sections
+  are recorded here as they land.
 
 ## Context
 
@@ -73,6 +74,29 @@ orchestrator and passed to the narration stage):
 
 **Rationale.** One place resolves each setting, precedence is explicit and matches the
 documented order, and the pipeline runs with no arguments while remaining overridable.
+
+## Decision 3 — Progress reporting and the stdout/stderr split (§3)
+
+**Decision.** All progress, disclosure, and human-readable chatter goes to **stderr**; **stdout**
+carries only the final machine-readable result.
+
+- **Pre-flight disclosure** (printed after the inspect banner, before any TTS or render call and
+  before the config/credential errors surface): branch, resolved base + its source,
+  working-tree state (included or not), run directory, scene-count target, narration
+  voice/model/format, and the planned output path. Under `--dry-run` the output line is
+  replaced by an explicit "(dry run — …)" marker.
+- **Stage banners** `[1/5] … [5/5]` are written to stderr, as are narration `onProgress`
+  events (`generating` / `retrying` / `cached` / …), the render line, warnings, and the human
+  "Rendered: …" summary.
+- **stdout contract:** the output path on success; the scene-plan JSON with `--stdout`; a small
+  JSON summary (`dryRun`, `scenes`, `totalCharacters`, `estimatedCostUsd`, `costBasis`) with
+  `--dry-run`. These will be superseded by the §5 run report.
+- **Remotion's own output** is forwarded to stderr (`stdio: ["inherit", process.stderr,
+process.stderr]`), so the renderer cannot pollute stdout.
+- **Dry-run** lines are prefixed `[dry run]` so they are never mistaken for a real render.
+
+**Rationale.** Callers (and the skill) can parse stdout deterministically while a human reads
+the live progress on stderr.
 
 ---
 

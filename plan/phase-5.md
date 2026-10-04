@@ -93,16 +93,16 @@ directory contract.
 
 ## 3. Progress reporting and pre-flight disclosure
 
-- [ ] **State the plan before long work** (§11): print branch, resolved base (and its source),
+- [x] **State the plan before long work** (§11): print branch, resolved base (and its source),
       whether working-tree changes are included, scene count target, chosen voice/model, and
       the planned output path before any TTS or render call.
-- [ ] Emit stage banners (`[1/5] inspect`, `[2/5] plan`, …) to **stderr**, keeping **stdout**
+- [x] Emit stage banners (`[1/5] inspect`, `[2/5] plan`, …) to **stderr**, keeping **stdout**
       reserved for the final machine-readable result (report JSON) so callers can parse it.
-- [ ] Surface the narration stage's existing `onProgress` events (per-scene "generating" /
+- [x] Surface the narration stage's existing `onProgress` events (per-scene "generating" /
       "retrying" / "done") and a render progress line; do not add a dependency — reuse the
       `NarrationProgressEvent` stream and Remotion's own output.
-- [ ] Clearly mark dry-run output (`[dry run]`) so it is never mistaken for a real render.
-- [ ] Keep all human-readable chatter off stdout; the final result line/paths go to stdout.
+- [x] Clearly mark dry-run output (`[dry run]`) so it is never mistaken for a real render.
+- [x] Keep all human-readable chatter off stdout; the final result line/paths go to stdout.
 
 **Decision to record:** stdout vs. stderr split, and the pre-flight disclosure contents.
 

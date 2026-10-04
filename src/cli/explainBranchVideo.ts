@@ -82,6 +82,9 @@ Options:
 Artifacts are written under the run directory: branch-plan.json, plan.json (narrated),
 audio/<scene>.wav, and render-input.json. Narration requires OPENAI_API_KEY.
 
+Progress and pre-flight disclosure are written to stderr; stdout carries only the final
+result (the output path; the plan JSON with --stdout; a JSON summary with --dry-run).
+
 Defaults can be set per repository in .explain-branch.json or package.json
 (`explainBranch`): `base`, `maxScenes`, and `narration`. Precedence for narration is
 CLI flag > .explain-branch.json > package.json > EXPLAIN_BRANCH_TTS_* env > built-in.
@@ -321,9 +324,7 @@ async function main(): Promise<void> {
       }`,
     );
     log(`Run dir:      ${runDir}`);
-    log(
-      `Scenes:       up to ${maxScenes ?? 5} (including the summary)`,
-    );
+    log(`Scenes:       up to ${maxScenes ?? 5} (including the summary)`);
 
     // --stdout is a plan-only mode: no narration, no render, and no files written.
     if (options.stdout) {
@@ -336,6 +337,24 @@ async function main(): Promise<void> {
       return;
     }
 
+    // Resolve the narration config once (offline, validated) so the pre-flight disclosure can
+    // report the exact voice/model and the precedence chain is applied in exactly one place.
+    const { config } = await resolveNarrationConfig({
+      repositoryRoot,
+      overrides: options.overrides,
+    });
+    const plannedOut =
+      options.outPath ??
+      path.join(repositoryRoot, "artifacts", "branch-explainer.mp4");
+    log(`Narration:    ${config.voice} (${config.model}, ${config.format})`);
+    log(
+      `Output:       ${
+        options.dryRun
+          ? "(dry run — no audio will be generated and nothing will be rendered)"
+          : plannedOut
+      }`,
+    );
+
     let narratedPlan: ExplainerPlan | null = null;
 
     if (!options.force && !options.dryRun) {
@@ -347,16 +366,6 @@ async function main(): Promise<void> {
     }
 
     if (narratedPlan === null) {
-      // Resolve the narration config once (offline, validated) and pass it to the narration
-      // stage, so the precedence chain is applied in exactly one place.
-      const { config } = await resolveNarrationConfig({
-        repositoryRoot,
-        overrides: options.overrides,
-      });
-      log(
-        `Narration:    ${config.voice} (${config.model}, ${config.format})`,
-      );
-
       log("[2/5] Building a scene plan...");
       const { plan } = await runPlan({
         inventory,
@@ -389,13 +398,27 @@ async function main(): Promise<void> {
       });
 
       if (narrate.dryRun) {
-        console.log(
-          `Dry run: ${narrate.clips.length} scene(s), ${narrate.totalCharacters} character(s).`,
-        );
         for (const clip of narrate.clips) {
-          console.log(`  ${clip.sceneId}: ${clip.characters} char(s)`);
+          log(`  [dry run] ${clip.sceneId}: ${clip.characters} char(s)`);
         }
-        console.log("No audio was generated and nothing was rendered.");
+        log(
+          `[dry run] ${narrate.clips.length} scene(s), ${narrate.totalCharacters} character(s); estimated cost $${narrate.costEstimate.usd.toFixed(4)}.`,
+        );
+        log("[dry run] No audio was generated and nothing was rendered.");
+        // stdout carries only the machine-readable result; the human summary went to stderr.
+        process.stdout.write(
+          `${JSON.stringify(
+            {
+              dryRun: true,
+              scenes: narrate.clips.length,
+              totalCharacters: narrate.totalCharacters,
+              estimatedCostUsd: narrate.costEstimate.usd,
+              costBasis: narrate.costEstimate.basis,
+            },
+            null,
+            2,
+          )}\n`,
+        );
         return;
       }
 
@@ -437,7 +460,9 @@ async function main(): Promise<void> {
     }
 
     log("[5/5] Done.");
-    console.log(`Rendered: ${render.outPath}`);
+    log(`Rendered: ${render.outPath}`);
+    // stdout carries only the final result (the output path); chatter stays on stderr.
+    process.stdout.write(`${render.outPath}\n`);
   } catch (error) {
     reportError(error);
   }
