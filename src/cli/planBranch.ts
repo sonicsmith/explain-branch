@@ -8,14 +8,10 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  buildChangeInventory,
-  BaseResolutionError,
-} from "../analysis/buildChangeInventory.ts";
-import { validatePlan } from "../analysis/validatePlan.ts";
-import { buildPlan } from "../planning/buildPlan.ts";
+import { BaseResolutionError } from "../analysis/buildChangeInventory.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
 import { GitError } from "../git/git.ts";
+import { PlanValidationError, runPlan } from "../pipeline/stages.ts";
 
 interface CliOptions {
   base?: string;
@@ -152,27 +148,12 @@ async function main(): Promise<void> {
   }
 
   try {
-    const inventory = await buildChangeInventory({
+    const { inventory, plan } = await runPlan({
       base: options.base,
       includeWorkingTree: options.includeWorkingTree,
       repoPath: options.repoPath,
-    });
-
-    const { plan, snapshot } = await buildPlan({
-      repositoryRoot: inventory.repositoryRoot,
-      inventory,
       maxScenes: options.maxScenes,
     });
-
-    const validation = validatePlan(plan, { snapshot });
-    if (!validation.valid) {
-      console.error("error: the generated plan failed validation:");
-      for (const issue of validation.errors) {
-        console.error(`  - ${issue.path}: ${issue.message}`);
-      }
-      process.exitCode = 3;
-      return;
-    }
 
     const json = `${JSON.stringify(plan, null, 2)}\n`;
 
@@ -192,6 +173,14 @@ async function main(): Promise<void> {
     if (error instanceof BaseResolutionError) {
       console.error(`error: ${error.message}`);
       process.exitCode = 2;
+      return;
+    }
+    if (error instanceof PlanValidationError) {
+      console.error("error: the generated plan failed validation:");
+      for (const issue of error.issues) {
+        console.error(`  - ${issue.path}: ${issue.message}`);
+      }
+      process.exitCode = 3;
       return;
     }
     if (error instanceof GitError) {

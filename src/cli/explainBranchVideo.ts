@@ -1,0 +1,406 @@
+#!/usr/bin/env node
+/**
+ * Phase 5 orchestrator: run the whole pipeline end to end.
+ *
+ * inspect → plan → narrate → render → validate, under a single run directory
+ * (`artifacts/<run-id>/`). Each stage is the same callable function its standalone CLI uses
+ * (`src/pipeline/stages.ts`), so behaviour never diverges.
+ *
+ * The run is resumable: when `<run-dir>/plan.json` already exists and validates, the narrated
+ * plan is reused and only the render is repeated. `narratePlan` also skips cached clips, so a
+ * failed render never re-bills for audio it already has.
+ *
+ * Read-only with respect to tracked source: the only writes are artifacts under the run
+ * directory (and the output MP4).
+ */
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { BaseResolutionError } from "../analysis/buildChangeInventory.ts";
+import { resolveRepositoryRoot } from "../git/inspectBranch.ts";
+import {
+  NarrationConfigError,
+  type NarrationConfigOverrides,
+} from "../narration/config.ts";
+import {
+  CredentialRejectedError,
+  MissingCredentialError,
+} from "../narration/credentials.ts";
+import type { NarrationProgressEvent } from "../narration/narratePlan.ts";
+import { validateNarratedPlan } from "../narration/validateNarration.ts";
+import type { ExplainerPlan } from "../planning/types.ts";
+import {
+  PlanValidationError,
+  resolveRunDir,
+  runInspect,
+  runNarrate,
+  runPlan,
+  runRender,
+} from "../pipeline/stages.ts";
+
+interface CliOptions {
+  repoPath?: string;
+  base?: string;
+  includeWorkingTree: boolean;
+  maxScenes?: number;
+  runId?: string;
+  runDir?: string;
+  outPath?: string;
+  force: boolean;
+  overwrite: boolean;
+  dryRun: boolean;
+  overrides: NarrationConfigOverrides;
+  help: boolean;
+}
+
+const HELP = `explain-branch — turn the current branch into a narrated explainer video (end to end)
+
+Usage:
+  explain-branch-video [options]
+
+Options:
+  --base <ref>             Compare against this ref (default: auto-resolved)
+  --include-working-tree   Include uncommitted working-tree changes (default: false)
+  --max-scenes <n>         Total scenes including the summary (default: 5)
+  --run-id <id>            Run directory name (default: the branch name)
+  --run-dir <path>         Explicit run directory (default: <repo>/artifacts/<run-id>)
+  --out <path>             Output MP4 (default: <repo>/artifacts/branch-explainer.mp4)
+  --force                  Re-plan and regenerate even when a resume is possible
+  --overwrite              Allow replacing an existing output (default: timestamped name)
+  --dry-run                Plan + cost estimate only; no audio, no render
+  --provider <name>        Narration provider (default: openai)
+  --model <id>             TTS model (default: gpt-4o-mini-tts)
+  --voice <name>           Voice (default: marin)
+  --format <fmt>           Audio format: mp3|opus|aac|flac|wav|pcm (default: wav)
+  --instructions <txt>     Tone/style instructions (gpt-4o-mini-tts only)
+  --repo <path>            Path inside the repository (default: cwd)
+  -h, --help               Show this help
+
+Artifacts are written under the run directory: branch-plan.json, plan.json (narrated),
+audio/<scene>.wav, and render-input.json. Narration requires OPENAI_API_KEY.
+
+Exit codes: 0 success, 2 base/config could not be resolved, 3 plan failed validation,
+4 missing/rejected credentials, 1 other error.
+
+Narration text is derived from repository content and is sent to the configured provider.`;
+
+function splitFlag(
+  arg: string,
+): [flag: string, inlineValue: string | undefined] {
+  const equals = arg.indexOf("=");
+  if (equals === -1) return [arg, undefined];
+  return [arg.slice(0, equals), arg.slice(equals + 1)];
+}
+
+function parseArgs(argv: readonly string[]): CliOptions {
+  const options: CliOptions = {
+    includeWorkingTree: false,
+    force: false,
+    overwrite: false,
+    dryRun: false,
+    overrides: {},
+    help: false,
+  };
+
+  let index = 0;
+  while (index < argv.length) {
+    const arg = argv[index] ?? "";
+    const [flag, inlineValue] = splitFlag(arg);
+
+    const takeValue = (): string => {
+      if (inlineValue !== undefined) return inlineValue;
+      const next = argv[index + 1];
+      if (next === undefined)
+        throw new Error(`Option ${flag} requires a value.`);
+      index += 1;
+      return next;
+    };
+
+    switch (flag) {
+      case "-h":
+      case "--help":
+        options.help = true;
+        break;
+      case "--include-working-tree":
+        options.includeWorkingTree = true;
+        break;
+      case "--force":
+        options.force = true;
+        break;
+      case "--overwrite":
+        options.overwrite = true;
+        break;
+      case "--dry-run":
+        options.dryRun = true;
+        break;
+      case "--base":
+        options.base = takeValue();
+        break;
+      case "--repo":
+        options.repoPath = takeValue();
+        break;
+      case "--run-id":
+        options.runId = takeValue();
+        break;
+      case "--run-dir":
+        options.runDir = takeValue();
+        break;
+      case "--out":
+        options.outPath = takeValue();
+        break;
+      case "--provider":
+        options.overrides.provider = takeValue();
+        break;
+      case "--model":
+        options.overrides.model = takeValue();
+        break;
+      case "--voice":
+        options.overrides.voice = takeValue();
+        break;
+      case "--format":
+        options.overrides.format = takeValue();
+        break;
+      case "--instructions":
+        options.overrides.instructions = takeValue();
+        break;
+      case "--max-scenes": {
+        const value = Number(takeValue());
+        if (!Number.isInteger(value) || value < 1) {
+          throw new Error("--max-scenes must be a positive integer.");
+        }
+        options.maxScenes = value;
+        break;
+      }
+      default:
+        throw new Error(`Unknown option: ${arg}`);
+    }
+
+    index += 1;
+  }
+  return options;
+}
+
+function formatProgress(event: NarrationProgressEvent): string {
+  const details: string[] = [];
+  if (event.attempt !== undefined) details.push(`attempt ${event.attempt}`);
+  if (event.delayMs !== undefined) details.push(`retry in ${event.delayMs} ms`);
+  if (event.characters !== undefined) details.push(`${event.characters} chars`);
+  if (event.durationMs !== undefined) details.push(`${event.durationMs} ms`);
+  const suffix = details.length > 0 ? ` (${details.join(", ")})` : "";
+  return `  ${event.sceneId}: ${event.status}${suffix}`;
+}
+
+/** Loads and validates an existing narrated plan; returns `null` when it is absent/invalid. */
+async function tryResumeNarratedPlan(
+  planPath: string,
+  repositoryRoot: string,
+): Promise<ExplainerPlan | null> {
+  let raw: string;
+  try {
+    raw = await readFile(planPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  let plan: ExplainerPlan;
+  try {
+    plan = JSON.parse(raw) as ExplainerPlan;
+  } catch {
+    return null;
+  }
+
+  const validation = await validateNarratedPlan({ plan, repositoryRoot });
+  return validation.valid ? plan : null;
+}
+
+function reportError(error: unknown): void {
+  if (
+    error instanceof MissingCredentialError ||
+    error instanceof CredentialRejectedError
+  ) {
+    console.error(`error: ${error.message}`);
+    process.exitCode = 4;
+    return;
+  }
+  if (
+    error instanceof NarrationConfigError ||
+    error instanceof BaseResolutionError
+  ) {
+    console.error(`error: ${error.message}`);
+    process.exitCode = 2;
+    return;
+  }
+  if (error instanceof PlanValidationError) {
+    console.error("error: the generated plan failed validation:");
+    for (const issue of error.issues) {
+      console.error(`  - ${issue.path}: ${issue.message}`);
+    }
+    process.exitCode = 3;
+    return;
+  }
+  console.error(
+    `error: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exitCode = 1;
+}
+
+async function main(): Promise<void> {
+  let options: CliOptions;
+  try {
+    options = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(
+      `error: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    console.error(HELP);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (options.help) {
+    console.log(HELP);
+    return;
+  }
+
+  const log = (message: string): void => console.error(message);
+
+  try {
+    const repositoryRoot = await resolveRepositoryRoot(
+      options.repoPath ?? process.cwd(),
+    );
+
+    log("[1/5] Inspecting the branch...");
+    const inventory = await runInspect({
+      ...(options.repoPath !== undefined ? { repoPath: options.repoPath } : {}),
+      ...(options.base !== undefined ? { base: options.base } : {}),
+      includeWorkingTree: options.includeWorkingTree,
+    });
+
+    const { runDir, relativeRunDir } = resolveRunDir({
+      repositoryRoot,
+      ...(options.runId !== undefined ? { runId: options.runId } : {}),
+      ...(options.runDir !== undefined ? { runDir: options.runDir } : {}),
+      branchName: inventory.currentBranch,
+    });
+    const relativeAudioDir = path.posix.join(relativeRunDir, "audio");
+    const planPath = path.join(runDir, "plan.json");
+
+    // Disclosure before any long work (plan §11): state exactly what will be analysed.
+    log(`Branch:       ${inventory.currentBranch ?? "(detached HEAD)"}`);
+    log(
+      `Base:         ${
+        inventory.base !== null
+          ? `${inventory.base.ref} (${inventory.base.source})`
+          : "(unresolved)"
+      }`,
+    );
+    log(
+      `Working tree: ${
+        inventory.workingTree.isDirty
+          ? options.includeWorkingTree
+            ? `dirty (${inventory.workingTree.changedPaths.length} change(s), included)`
+            : `dirty (${inventory.workingTree.changedPaths.length} change(s), NOT included)`
+          : "clean"
+      }`,
+    );
+    log(`Run dir:      ${runDir}`);
+
+    let narratedPlan: ExplainerPlan | null = null;
+
+    if (!options.force && !options.dryRun) {
+      narratedPlan = await tryResumeNarratedPlan(planPath, repositoryRoot);
+      if (narratedPlan !== null) {
+        log(`[2/5] Reusing the validated narrated plan at ${planPath}`);
+        log("[3/5] Narration already generated — skipping.");
+      }
+    }
+
+    if (narratedPlan === null) {
+      log("[2/5] Building a scene plan...");
+      const { plan } = await runPlan({
+        inventory,
+        ...(options.maxScenes !== undefined
+          ? { maxScenes: options.maxScenes }
+          : {}),
+      });
+
+      // Checkpoint the pre-narration plan so a failed narration can resume without re-planning.
+      // A dry run writes nothing at all.
+      if (!options.dryRun) {
+        await mkdir(runDir, { recursive: true });
+        await writeFile(
+          path.join(runDir, "branch-plan.json"),
+          `${JSON.stringify(plan, null, 2)}\n`,
+          "utf8",
+        );
+      }
+
+      log("[3/5] Generating narration...");
+      const narrate = await runNarrate({
+        repositoryRoot,
+        plan,
+        runDir,
+        relativeAudioDir,
+        overrides: options.overrides,
+        ...(options.force ? { force: true } : {}),
+        ...(options.dryRun ? { dryRun: true } : {}),
+        planPath,
+        onProgress: (event) => log(formatProgress(event)),
+        log,
+      });
+
+      if (narrate.dryRun) {
+        console.log(
+          `Dry run: ${narrate.clips.length} scene(s), ${narrate.totalCharacters} character(s).`,
+        );
+        for (const clip of narrate.clips) {
+          console.log(`  ${clip.sceneId}: ${clip.characters} char(s)`);
+        }
+        console.log("No audio was generated and nothing was rendered.");
+        return;
+      }
+
+      const validation = await validateNarratedPlan({
+        plan: narrate.plan,
+        repositoryRoot,
+      });
+      if (!validation.valid) {
+        console.error("error: the narrated plan failed validation:");
+        for (const issue of validation.planErrors) {
+          console.error(`  - ${issue.path}: ${issue.message}`);
+        }
+        for (const issue of validation.audioErrors) {
+          console.error(`  - ${issue.path}: ${issue.message}`);
+        }
+        process.exitCode = 3;
+        return;
+      }
+
+      narratedPlan = narrate.plan;
+    }
+
+    log("[4/5] Rendering the video...");
+    const render = await runRender({
+      repositoryRoot,
+      plan: narratedPlan,
+      runDir,
+      ...(options.outPath !== undefined ? { outPath: options.outPath } : {}),
+      overwrite: options.overwrite,
+      log,
+    });
+
+    if (render.exitCode !== 0) {
+      process.exitCode = render.exitCode;
+      log(
+        `Render failed (exit ${render.exitCode}). The plan and audio clips were kept under ${runDir}; re-run to resume without regenerating cached audio.`,
+      );
+      return;
+    }
+
+    log("[5/5] Done.");
+    console.log(`Rendered: ${render.outPath}`);
+  } catch (error) {
+    reportError(error);
+  }
+}
+
+await main();

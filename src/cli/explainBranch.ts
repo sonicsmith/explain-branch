@@ -8,13 +8,13 @@
  * errors.
  */
 import {
-  buildChangeInventory,
   BaseResolutionError,
   type ChangeInventory,
   type InventoryFile,
 } from "../analysis/buildChangeInventory.ts";
 import { GitError } from "../git/git.ts";
 import type { ChangeType } from "../git/parseDiff.ts";
+import { runInspect } from "../pipeline/stages.ts";
 
 interface CliOptions {
   base?: string;
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    const inventory = await buildChangeInventory({
+    const inventory = await runInspect({
       base: options.base,
       includeWorkingTree: options.includeWorkingTree,
       repoPath: options.repoPath,

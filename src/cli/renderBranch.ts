@@ -10,26 +10,11 @@
  *
  * Writes only `render-input.json` and the output MP4; never overwrites silently.
  */
-import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { resolveRepositoryRoot } from "../git/inspectBranch.ts";
-import { capturePlanSnapshot } from "../narration/validateNarration.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
-import { resolveOutputPath } from "../render/outputPath.ts";
-import type { RenderInput } from "../render/RenderInput.ts";
-
-const PLUGIN_ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const REMOTION_CLI = path.join(
-  PLUGIN_ROOT,
-  "node_modules",
-  "@remotion",
-  "cli",
-  "remotion-cli.js",
-);
-const ENTRY_POINT = path.join(PLUGIN_ROOT, "src", "render", "index.ts");
-const COMPOSITION_ID = "ExplainBranch";
+import { runRender } from "../pipeline/stages.ts";
 
 interface CliOptions {
   repoPath?: string;
@@ -102,31 +87,6 @@ function parseArgs(argv: readonly string[]): CliOptions {
   return options;
 }
 
-/** Converts a captured snapshot into the plain `sources` map the renderer expects. */
-async function captureSources(
-  plan: ExplainerPlan,
-  repositoryRoot: string,
-): Promise<Record<string, string>> {
-  const snapshot = await capturePlanSnapshot(plan, repositoryRoot);
-  const sources: Record<string, string> = {};
-  for (const file of snapshot.paths()) {
-    const lines = snapshot.lines(file);
-    if (lines !== null) sources[file] = lines.join("\n");
-  }
-  return sources;
-}
-
-function runRemotion(args: readonly string[], cwd: string): Promise<number> {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [REMOTION_CLI, ...args], {
-      cwd,
-      stdio: "inherit",
-    });
-    child.on("close", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
-  });
-}
-
 async function main(): Promise<void> {
   let options: CliOptions;
   try {
@@ -166,57 +126,20 @@ async function main(): Promise<void> {
       return;
     }
 
-    const sources = await captureSources(plan, repositoryRoot);
-    if (Object.keys(sources).length === 0 && plan.scenes.length > 0) {
-      console.error(
-        "warning: no source files were captured; code scenes will be empty.",
-      );
-    }
-
-    const renderInput: RenderInput = { plan, sources, options: {} };
-    const renderInputPath = path.join(
-      path.dirname(planPath),
-      "render-input.json",
-    );
-    await mkdir(path.dirname(renderInputPath), { recursive: true });
-    await writeFile(
-      renderInputPath,
-      `${JSON.stringify(renderInput, null, 2)}\n`,
-      "utf8",
-    );
-
-    const desiredOut =
-      options.outPath ??
-      path.join(repositoryRoot, "artifacts", "branch-explainer.mp4");
-    const { path: outPath, collided } = await resolveOutputPath(desiredOut, {
+    const result = await runRender({
+      repositoryRoot,
+      plan,
+      runDir: path.dirname(planPath),
+      ...(options.outPath !== undefined ? { outPath: options.outPath } : {}),
       overwrite: options.overwrite,
+      log: (message) => console.error(message),
     });
-    if (collided && !options.overwrite) {
-      console.error(
-        `Existing output kept; writing a new file instead: ${outPath}`,
-      );
-    }
 
-    const args = [
-      "render",
-      ENTRY_POINT,
-      COMPOSITION_ID,
-      outPath,
-      `--props=${renderInputPath}`,
-      `--public-dir=${repositoryRoot}`,
-    ];
-    if (!options.overwrite) args.push("--overwrite=false");
-
-    console.error(
-      `Rendering ${plan.scenes.length} scene(s) -> ${outPath} (props: ${renderInputPath})`,
-    );
-
-    const code = await runRemotion(args, PLUGIN_ROOT);
-    if (code !== 0) {
-      process.exitCode = code;
+    if (result.exitCode !== 0) {
+      process.exitCode = result.exitCode;
       return;
     }
-    console.log(`Rendered: ${outPath}`);
+    console.log(`Rendered: ${result.outPath}`);
   } catch (error) {
     console.error(
       `error: ${error instanceof Error ? error.message : String(error)}`,

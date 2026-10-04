@@ -10,13 +10,13 @@
     "inspect": "node src/cli/explainBranch.ts",
     "plan": "node src/cli/planBranch.ts",
     "narrate": "node src/cli/narrateBranch.ts",
+    "explain": "node src/cli/explainBranchVideo.ts",
     "studio": "remotion studio src/render/index.ts",
     "render:fixture": "remotion render src/render/index.ts ExplainBranch artifacts/render-fixture.mp4",
     "render:narrated": "node src/cli/renderBranch.ts",
     "test": "node --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
-    "browser:ensure": "remotion browser ensure",
-    "studio": "remotion studio"
+    "browser:ensure": "remotion browser ensure"
   },
   "dependencies": {
     "@shikijs/langs": "4.5.0",

@@ -9,29 +9,24 @@
  *
  * Credentials: requires `OPENAI_API_KEY` unless `--dry-run` is set.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveRepositoryRoot } from "../git/inspectBranch.ts";
 import {
   NarrationConfigError,
-  resolveNarrationConfig,
   type NarrationConfigOverrides,
 } from "../narration/config.ts";
 import {
   CredentialRejectedError,
   MissingCredentialError,
-  readOpenAiApiKey,
 } from "../narration/credentials.ts";
 import {
   audioFileName,
-  narratePlan,
   type NarrationProgressEvent,
 } from "../narration/narratePlan.ts";
-import { createOpenAiSpeechProvider } from "../narration/openaiSpeechProvider.ts";
-import { NarrationError, type SpeechProvider } from "../narration/provider.ts";
-import { redactPlanNarration } from "../narration/redact.ts";
 import { validateNarratedPlan } from "../narration/validateNarration.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
+import { resolveRunDir, runNarrate } from "../pipeline/stages.ts";
 
 interface CliOptions {
   repoPath?: string;
@@ -156,17 +151,6 @@ function parseArgs(argv: readonly string[]): CliOptions {
   return options;
 }
 
-function toPosix(value: string): string {
-  return value.split(path.sep).join("/");
-}
-
-function defaultRunId(plan: ExplainerPlan): string {
-  const safe = (plan.branchName ?? "")
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^[-.]+|[-.]+$/g, "");
-  return safe === "" ? "run" : safe;
-}
-
 function formatProgress(event: NarrationProgressEvent): string {
   const details: string[] = [];
   if (event.attempt !== undefined) details.push(`attempt ${event.attempt}`);
@@ -215,71 +199,29 @@ async function main(): Promise<void> {
       return;
     }
 
-    // Pre-flight: redact secret-looking values before they can leave the machine, and report
-    // what was filtered. The redacted plan is what gets narrated, written, and rendered.
-    const redaction = redactPlanNarration(plan);
-    if (redaction.totalRedactions > 0) {
-      console.error(
-        `Redacted ${redaction.totalRedactions} secret-looking value(s) from narration before it could be sent to the provider:`,
-      );
-      for (const report of redaction.reports) {
-        console.error(
-          `  ${report.sceneId}: ${report.redactions
-            .map((entry) => `${entry.kind} x${entry.count}`)
-            .join(", ")}`,
-        );
-      }
-    }
-    plan = redaction.plan;
-
-    const { config } = await resolveNarrationConfig({
+    // Pre-flight redaction, run-directory resolution, config resolution, credential
+    // handling, generation, duration measurement, and plan writing all live in the shared
+    // narrate stage so the orchestrator runs exactly this code.
+    const { runDir, relativeRunDir } = resolveRunDir({
       repositoryRoot,
-      overrides: options.overrides,
+      ...(options.runId !== undefined ? { runId: options.runId } : {}),
+      ...(options.runDir !== undefined ? { runDir: options.runDir } : {}),
+      branchName: plan.branchName,
     });
-
-    const runId = options.runId ?? defaultRunId(plan);
-    const runDir =
-      options.runDir !== undefined
-        ? path.resolve(repositoryRoot, options.runDir)
-        : path.join(repositoryRoot, "artifacts", runId);
-
-    const relativeRunDir = toPosix(path.relative(repositoryRoot, runDir));
-    if (
-      relativeRunDir === "" ||
-      relativeRunDir === "." ||
-      relativeRunDir.startsWith("../")
-    ) {
-      throw new NarrationError(
-        "The run directory must be inside the repository so plan audio paths stay repository-relative.",
-      );
-    }
-
-    const audioDir = path.join(runDir, "audio");
     const relativeAudioDir = path.posix.join(relativeRunDir, "audio");
 
-    let provider: SpeechProvider | undefined;
-    if (!options.dryRun) {
-      const apiKey = readOpenAiApiKey();
-      provider = createOpenAiSpeechProvider({ apiKey });
-    }
-
-    console.error(
-      `Narration text is derived from repository content and will be sent to the ${config.provider} TTS provider${options.dryRun ? " (dry run: nothing is sent)" : ""}.`,
-    );
-    console.error(
-      `Narrating ${plan.scenes.length} scene(s) with ${config.model} (${config.voice}, ${config.format})${options.dryRun ? " [dry run]" : ""}.`,
-    );
-
-    const result = await narratePlan({
+    const result = await runNarrate({
+      repositoryRoot,
       plan,
-      config,
-      audioDir,
+      runDir,
       relativeAudioDir,
-      ...(provider !== undefined ? { provider } : {}),
-      force: options.force,
+      overrides: options.overrides,
+      ...(options.outPath !== undefined ? { planPath: options.outPath } : {}),
+      ...(options.force !== undefined ? { force: options.force } : {}),
       ...(options.sceneIds.length > 0 ? { sceneIds: options.sceneIds } : {}),
-      dryRun: options.dryRun,
+      ...(options.dryRun !== undefined ? { dryRun: options.dryRun } : {}),
       onProgress: (event) => console.error(formatProgress(event)),
+      log: (message) => console.error(message),
     });
 
     const cost = result.costEstimate;
@@ -301,19 +243,11 @@ async function main(): Promise<void> {
     const generated = result.clips.filter((clip) => !clip.cached).length;
     const cached = result.clips.filter((clip) => clip.cached).length;
     console.log(`Clips:    ${generated} generated, ${cached} reused`);
-
-    const outPath = options.outPath ?? path.join(runDir, "plan.json");
-    await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(
-      outPath,
-      `${JSON.stringify(result.plan, null, 2)}\n`,
-      "utf8",
-    );
-    console.log(`Plan:     ${outPath}`);
+    console.log(`Plan:     ${result.planPath}`);
     for (const clip of result.clips) {
       if (clip.audioPath === undefined) continue;
       console.log(
-        `  ${audioFileName(clip.sceneId, config.format)} -> ${clip.audioPath}`,
+        `  ${audioFileName(clip.sceneId, result.config.format)} -> ${clip.audioPath}`,
       );
     }
 
