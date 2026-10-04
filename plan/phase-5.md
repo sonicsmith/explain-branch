@@ -149,18 +149,18 @@ directory contract.
 
 ## 6. Skill and plugin wiring
 
-- [ ] Update `skills/explain-branch/SKILL.md`: replace the stale "Phase 3 / silent renderer"
+- [x] Update `skills/explain-branch/SKILL.md`: replace the stale "Phase 3 / silent renderer"
       status with the real workflow, pointing at the orchestrator as the single command and
       listing the flags, defaults, exit codes, and the `OPENAI_API_KEY` requirement.
-- [ ] Confirm the invocation token (`$explain-branch` in Codex; `/explain-branch` on the
+- [x] Confirm the invocation token (`$explain-branch` in Codex; `/explain-branch` on the
       Claude surface) and how the skill passes arguments to the orchestrator (env
       `PLUGIN_ROOT`, cwd, argv). Record the verified contract.
-- [ ] Keep the skill honest: it must state that a silent video is never produced when
+- [x] Keep the skill honest: it must state that a silent video is never produced when
       credentials are absent, and must never claim narration it did not generate.
-- [ ] Bump versions: `package.json` and `plugin.json` to the Phase 5 version (e.g. `0.5.0`),
+- [x] Bump versions: `package.json` and `plugin.json` to the Phase 5 version (e.g. `0.5.0`),
       and update the `plugin.json` `extensions.com.openai` description if the capability set
       changes.
-- [ ] Add a `skills/explain-branch/references/` entry (plan schema + flag reference) or reuse
+- [x] Add a `skills/explain-branch/references/` entry (plan schema + flag reference) or reuse
       the existing docs so the skill and the code do not drift.
 
 **Decision to record:** the invocation/argument contract between the skill and the CLI.

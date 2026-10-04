@@ -1,6 +1,6 @@
 {
   "name": "explain-branch",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Codex plugin that turns the current Git branch into a narrated explainer video.",

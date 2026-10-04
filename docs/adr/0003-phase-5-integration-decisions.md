@@ -5,8 +5,8 @@
 - **Phase:** 5 (End-to-end integration) — see [`plan/phase-5.md`](../../plan/phase-5.md)
 - **Scope:** Records the §1 (orchestrator entry point), §2 (configuration surface and
   precedence), §3 (progress reporting and stdout/stderr split), §4 (error handling, exit codes,
-  and recoverability), and §5 (output management and the run report) decisions. Later sections
-  are recorded here as they land.
+  and recoverability), §5 (output management and the run report), and §6 (skill and plugin
+  wiring) decisions. Later sections are recorded here as they land.
 
 ## Context
 
@@ -159,6 +159,29 @@ directory, and a machine-readable report is the CLI's stdout result.
 **Rationale.** A single versioned report makes the run inspectable and machine-consumable, the
 narration script and plan travel with the video, and verifying the output prevents a
 false-success when the renderer writes nothing.
+
+## Decision 6 — Skill and plugin wiring (§6)
+
+**Decision.** The skill invokes the orchestrator and is honest about credentials and versions.
+
+- **Invocation contract.** The Codex surface triggers the skill as `$explain-branch` (the
+  Claude/other surface uses `/explain-branch`). The host sets `PLUGIN_ROOT` to the plugin
+  directory and runs the skill with the **target repository as cwd**. The skill runs:
+  `node "${PLUGIN_ROOT}/src/cli/explainBranchVideo.ts" [flags…]` and passes flags through as
+  **argv**; relative paths resolve against the cwd (the repository being explained) unless
+  `--repo` is given.
+- **Skill honesty.** `SKILL.md` states that narration requires `OPENAI_API_KEY`, that a missing
+  key stops the run (exit 4) _before_ planning, and that a silent video is never produced in its
+  place — the skill must not claim narration it did not generate.
+- **Docs beside the skill.** `skills/explain-branch/references/flags.md` (flag reference for the
+  orchestrator and the stage CLIs) and `references/plan-schema.md` (plan + report schemas, the
+  run-directory layout, and the privacy note) keep the skill and code from drifting.
+- **Versions.** `package.json` and `plugin.json` are bumped to `0.5.0`. The
+  `extensions.com.openai` capability set is unchanged (still `["Read"]` for repository access;
+  writes are local artifacts), so its description is left as-is.
+
+**Rationale.** A single documented command and a filename/argv contract make the skill a thin,
+verifiable wrapper; keeping schemas and flags next to the skill prevents documentation drift.
 
 ---
 
