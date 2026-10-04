@@ -135,16 +135,21 @@ defaults.
 
 ## 5. Validation and failure handling
 
-- [ ] Run `validatePlan(plan, { snapshot, requireNarrationAudio: true })` in the narrate path
+- [x] Run `validatePlan(plan, { snapshot, requireNarrationAudio: true })` in the narrate path
       and fail with a non-zero exit code when a scene lacks audio.
-- [ ] Validate at the audio layer too: clip exists, is non-empty, decodes, and its measured
+      → [`../src/narration/validateNarration.ts`](../src/narration/validateNarration.ts) wired into [`../src/cli/narrateBranch.ts`](../src/cli/narrateBranch.ts) (exit 3); ADR 0002 (Decision 5).
+- [x] Validate at the audio layer too: clip exists, is non-empty, decodes, and its measured
       duration matches the recorded `narrationDurationMs` within a tolerance.
-- [ ] Implement retries with exponential backoff + jitter for 429/5xx and network errors; cap
+      → `validateNarratedPlan` (tolerance 100 ms); ADR 0002 (Decision 5).
+- [x] Implement retries with exponential backoff + jitter for 429/5xx and network errors; cap
       attempts; **do not retry** 4xx that are not rate-limit related (bad request, auth).
-- [ ] Make failures recoverable: keep the plan and any already-generated clips so a retry
+      → [`../src/narration/retry.ts`](../src/narration/retry.ts) (`withRetry`) used in `narratePlan`; OpenAI SDK retries disabled (`maxRetries: 0`); ADR 0002 (Decision 5).
+- [x] Make failures recoverable: keep the plan and any already-generated clips so a retry
       resumes rather than restarting.
-- [ ] Ensure the final MP4 is written without silently overwriting an existing output
+      → per-scene clip + sidecar writes; cache-aware re-runs; CLI reports kept clips; ADR 0002 (Decision 5).
+- [x] Ensure the final MP4 is written without silently overwriting an existing output
       (timestamped name or explicit confirmation, per §2/§15).
+      → [`../src/render/outputPath.ts`](../src/render/outputPath.ts) (`resolveOutputPath`) + `--overwrite=false` in `npm run render:narrated`; ADR 0002 (Decision 5).
 
 **Decision to record:** retry policy, concurrency limit for TTS calls, and the overwrite rule.
 

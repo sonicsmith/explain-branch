@@ -12,6 +12,7 @@
     "narrate": "node src/cli/narrateBranch.ts",
     "studio": "remotion studio src/render/index.ts",
     "render:fixture": "remotion render src/render/index.ts ExplainBranch artifacts/render-fixture.mp4",
+    "render:narrated": "remotion render src/render/index.ts ExplainBranch artifacts/branch-explainer.mp4 --public-dir=. --overwrite=false",
     "test": "node --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "browser:ensure": "remotion browser ensure",

@@ -23,6 +23,12 @@ import {
   MAX_SPEECH_INPUT_CHARACTERS,
 } from "./limits.ts";
 import { measureAudioDurationMs, type FFprobeRunner } from "./duration.ts";
+import {
+  DEFAULT_RETRY_POLICY,
+  withRetry,
+  type RetryHooks,
+  type RetryPolicy,
+} from "./retry.ts";
 import { NarrationError, type SpeechProvider } from "./provider.ts";
 import type { NarrationConfig } from "./types.ts";
 import { readWavDurationMs } from "./wav.ts";
@@ -55,9 +61,18 @@ export interface ClipMetadata {
 
 export interface NarrationProgressEvent {
   sceneId: string;
-  status: "dry-run" | "generating" | "generated" | "cached" | "skipped";
+  status:
+    | "dry-run"
+    | "generating"
+    | "retrying"
+    | "generated"
+    | "cached"
+    | "skipped";
   characters?: number;
   durationMs?: number;
+  /** For `retrying`: which attempt failed and how long the next one waits. */
+  attempt?: number;
+  delayMs?: number;
 }
 
 export interface NarratedClip {
@@ -86,6 +101,10 @@ export interface NarratePlanOptions {
   dryRun?: boolean;
   /** Injected FFprobe runner used for non-WAV clips (offline tests). */
   ffprobe?: FFprobeRunner;
+  /** Retry policy for TTS calls; defaults to {@link DEFAULT_RETRY_POLICY}. */
+  retryPolicy?: RetryPolicy;
+  /** Injected retry hooks (sleep/random/onRetry) for deterministic tests. */
+  retryHooks?: RetryHooks;
   /** Injected for deterministic tests. */
   now?: () => Date;
   onProgress?: (event: NarrationProgressEvent) => void;
@@ -288,15 +307,32 @@ export async function narratePlan(
       status: "generating",
       characters,
     });
-    const bytes = await provider.synthesize({
-      text: scene.narrationText,
-      model: config.model,
-      voice: config.voice,
-      ...(config.instructions !== undefined
-        ? { instructions: config.instructions }
-        : {}),
-      format: config.format,
-    });
+    const retryPolicy = options.retryPolicy ?? DEFAULT_RETRY_POLICY;
+    const bytes = await withRetry(
+      () =>
+        provider.synthesize({
+          text: scene.narrationText,
+          model: config.model,
+          voice: config.voice,
+          ...(config.instructions !== undefined
+            ? { instructions: config.instructions }
+            : {}),
+          format: config.format,
+        }),
+      retryPolicy,
+      {
+        ...options.retryHooks,
+        onRetry: (info) => {
+          options.retryHooks?.onRetry?.(info);
+          options.onProgress?.({
+            sceneId: scene.id,
+            status: "retrying",
+            attempt: info.attempt,
+            delayMs: info.delayMs,
+          });
+        },
+      },
+    );
     if (bytes.byteLength === 0) {
       throw new NarrationError(
         `The TTS provider returned an empty clip for scene "${scene.id}".`,

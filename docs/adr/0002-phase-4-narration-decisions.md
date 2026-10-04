@@ -241,10 +241,42 @@ labelled as such, rather than exact word alignment.
 
 ---
 
+## Decision 5 — Retry policy, concurrency, validation, and the overwrite rule
+
+**Decision.**
+
+- **Retry policy:** transient failures only — HTTP 429 and 5xx, plus network errors
+  (`TypeError`, `APIConnectionError`, `ECONNRESET`, …). Exponential backoff with jitter:
+  `maxAttempts 4`, `initialDelayMs 500`, `factor 2`, `maxDelayMs 20000`, `jitter 0.25`.
+  `Retry-After`, when present, is treated as a **minimum** wait. Non-retryable client errors
+  (400, 401/403, 404, …) and credential failures surface immediately. The OpenAI SDK's own
+  retries are disabled (`maxRetries: 0`) so the two loops cannot multiply requests.
+- **Concurrency:** TTS calls are **sequential** (concurrency 1). A plan has few scenes and
+  per-scene clips already make retries independent; sequential keeps progress, ordering, and
+  rate-limit behaviour predictable. Revisit if scene counts grow.
+- **Recoverability:** clips and sidecars are written per scene, so a failure keeps completed
+  clips and a re-run resumes from cache without regenerating (or re-billing for) them.
+- **Overwrite rule:** outputs are never overwritten silently. `resolveOutputPath()` returns the
+  desired path when free, or a `<name>-<UTC timestamp>[-n]<ext>` sibling when it exists, unless
+  the caller opts in with `overwrite: true`. Remotion renders also pass `--overwrite=false`, so a
+  render fails loudly rather than clobbering a previous MP4.
+- **Validation:** the narrate path runs
+  `validatePlan(plan, { snapshot, requireNarrationAudio: true })` plus audio-layer checks — each
+  clip exists, is non-empty, decodes, and its measured duration is within
+  `DEFAULT_DURATION_TOLERANCE_MS = 100` ms of the recorded value — and exits non-zero on failure.
+
+**Implemented in** `src/narration/retry.ts`, `src/narration/validateNarration.ts`, and
+`src/render/outputPath.ts`; wired through `src/narration/narratePlan.ts` and
+`src/cli/narrateBranch.ts` (`npm run narrate`, `npm run render:narrated`).
+
+**Consequences.** Failed renders recover cheaply; rate limiting cannot double-retry; a second
+render never clobbers the first without an explicit flag.
+
+---
+
 ## Decisions pending
 
 Recorded here as their tasks are implemented:
 
-- §5 — retry policy, TTS concurrency limit, overwrite rule.
 - §6 — what is transmitted, and the redaction rules applied first.
 - §7 — how the TTS provider is abstracted so tests need no network.

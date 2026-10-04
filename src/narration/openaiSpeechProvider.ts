@@ -19,7 +19,11 @@ export interface OpenAiSpeechProviderOptions {
 export function createOpenAiSpeechProvider(
   options: OpenAiSpeechProviderOptions,
 ): SpeechProvider {
-  const client = options.client ?? new OpenAI({ apiKey: options.apiKey });
+  const client =
+    options.client ??
+    // Disable the SDK's built-in retries: the narration stage owns the retry policy, and two
+    // nested retry loops would multiply requests (see ADR 0002, Decisions 1 and 5).
+    new OpenAI({ apiKey: options.apiKey, maxRetries: 0 });
 
   return {
     async synthesize(request: SpeechSynthesisRequest): Promise<Uint8Array> {

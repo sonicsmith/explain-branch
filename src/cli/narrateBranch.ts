@@ -29,6 +29,7 @@ import {
 } from "../narration/narratePlan.ts";
 import { createOpenAiSpeechProvider } from "../narration/openaiSpeechProvider.ts";
 import { NarrationError, type SpeechProvider } from "../narration/provider.ts";
+import { validateNarratedPlan } from "../narration/validateNarration.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
 
 interface CliOptions {
@@ -167,6 +168,8 @@ function defaultRunId(plan: ExplainerPlan): string {
 
 function formatProgress(event: NarrationProgressEvent): string {
   const details: string[] = [];
+  if (event.attempt !== undefined) details.push(`attempt ${event.attempt}`);
+  if (event.delayMs !== undefined) details.push(`retry in ${event.delayMs} ms`);
   if (event.characters !== undefined) details.push(`${event.characters} chars`);
   if (event.durationMs !== undefined) details.push(`${event.durationMs} ms`);
   const suffix = details.length > 0 ? ` (${details.join(", ")})` : "";
@@ -292,6 +295,27 @@ async function main(): Promise<void> {
         `  ${audioFileName(clip.sceneId, config.format)} -> ${clip.audioPath}`,
       );
     }
+
+    // Second layer of validation: schema + source refs (requireNarrationAudio) and the clips
+    // themselves (exist, decodable, duration matches). Fail loudly rather than claim success.
+    const validation = await validateNarratedPlan({
+      plan: result.plan,
+      repositoryRoot,
+    });
+    if (!validation.valid) {
+      console.error("error: the narrated plan failed validation:");
+      for (const issue of validation.planErrors) {
+        console.error(`  - ${issue.path}: ${issue.message}`);
+      }
+      for (const issue of validation.audioErrors) {
+        console.error(`  - ${issue.path}: ${issue.message}`);
+      }
+      process.exitCode = 3;
+      return;
+    }
+    console.log(
+      `Validated: ${result.plan.scenes.length} scene(s) with narration audio.`,
+    );
   } catch (error) {
     if (error instanceof MissingCredentialError) {
       console.error(`error: ${error.message}`);
@@ -311,6 +335,11 @@ async function main(): Promise<void> {
     console.error(
       `error: ${error instanceof Error ? error.message : String(error)}`,
     );
+    if (!options.dryRun) {
+      console.error(
+        "Already-generated clips were kept under the run directory; re-running resumes from them without regenerating cached audio.",
+      );
+    }
     process.exitCode = 1;
   }
 }
