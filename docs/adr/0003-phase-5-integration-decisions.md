@@ -6,7 +6,7 @@
 - **Scope:** Records the §1 (orchestrator entry point), §2 (configuration surface and
   precedence), §3 (progress reporting and stdout/stderr split), §4 (error handling, exit codes,
   and recoverability), §5 (output management and the run report), §6 (skill and plugin wiring),
-  and §7 (offline testing) decisions. Later sections are recorded here as they land.
+  §7 (offline testing), and §8 (documentation) decisions. All Phase 5 sections are recorded.
 
 ## Context
 
@@ -216,6 +216,28 @@ network.
 **Rationale.** Spawning the real CLI with a fake provider and renderer exercises the exact
 orchestration flow (run directory, resume, report, exit codes) while staying deterministic and
 offline; a documented manual smoke test remains the final proof against the real services.
+
+## Decision 8 — Documentation (§8)
+
+**Decision.** `README.md` is the single authoritative usage doc for the end-to-end flow, with
+the detailed schemas kept beside the skill.
+
+- **README** now leads with a **one-command quick start** (`npm run explain` / `$explain-branch`),
+  the `OPENAI_API_KEY` setup, a flag table, the **run-directory output layout**, the **exit
+  codes**, and a **resume** note. The existing privacy/AI-voice disclosure is retained and
+  applies to the end-to-end flow.
+- **Run directory + report schema** are documented in
+  `skills/explain-branch/references/plan-schema.md` (and referenced from the README) so a failed
+  run can be inspected and resumed.
+- **Limitations** are stated honestly in the README: TTS requires a key and network (no silent
+  fallback); large branches are summarised with omissions listed; diagrams are optional and
+  never invent components; the pipeline is read-only (no branch switching or source writes);
+  code is shown from a validated snapshot.
+- The stage CLIs (`inspect`/`plan`/`narrate`/`render:narrated`) remain documented as the
+  advanced/manual path.
+
+**Rationale.** One quick-start doc plus a versioned schema reference means users can run the
+pipeline, understand its outputs, and recover from a failed run without reading the source.
 
 ---
 

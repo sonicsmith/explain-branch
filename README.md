@@ -4,11 +4,10 @@ A Codex plugin/skill that analyses the current Git branch and produces a **narra
 explainer video** showing what changed, how the changed code works, and how it fits the
 wider application.
 
-> **Status: Phase 4 — narration, audio-driven timing, and captions implemented.** Branch
-> inspection, scene planning, and the Remotion renderer (now narrated) are in place; the
-> final test/typecheck pass and the manual narrated smoke render are pending. See
-> [`plan/overview.md`](plan/overview.md) and
-> [`docs/adr/0002-phase-4-narration-decisions.md`](docs/adr/0002-phase-4-narration-decisions.md).
+> **Status: Phase 5 — end-to-end integration implemented.** One command runs
+> inspect → plan → narrate → render → validate behind the `$explain-branch` skill, writing a
+> versioned run report and artifacts. See [`plan/overview.md`](plan/overview.md) and
+> [`docs/adr/0003-phase-5-integration-decisions.md`](docs/adr/0003-phase-5-integration-decisions.md).
 
 ## Layout
 
@@ -35,9 +34,16 @@ wider application.
 │   │   ├── paths.ts                # path-safety checks
 │   │   └── buildPlan.ts            # deterministic planner
 │   ├── cli/
-│   │   ├── explainBranch.ts        # Phase 1 inspection CLI
-│   │   ├── planBranch.ts           # Phase 2 planning CLI
-│   │   └── narrateBranch.ts        # Phase 4 narration CLI
+│   │   ├── explainBranch.ts        # inspection CLI
+│   │   ├── planBranch.ts           # planning CLI
+│   │   ├── narrateBranch.ts        # narration CLI
+│   │   ├── renderBranch.ts         # narrated-render CLI
+│   │   └── explainBranchVideo.ts   # end-to-end orchestrator (the entry point)
+│   ├── pipeline/                   # Phase 5 composition
+│   │   ├── stages.ts               # runInspect/runPlan/runNarrate/runRender
+│   │   ├── report.ts               # run report + output artifacts
+│   │   ├── projectConfig.ts        # base/maxScenes repo defaults
+│   │   └── testHooks.ts            # offline test seams (env-gated)
 │   ├── narration/                  # Phase 4 text-to-speech narration
 │   │   ├── config.ts               # provider/model/voice/format configuration
 │   │   ├── credentials.ts          # OPENAI_API_KEY handling
@@ -73,6 +79,75 @@ wider application.
 - Node.js `>= 22.18` (verified on v24.21.0) — runs `.ts` files directly, no build step.
 - macOS 15+ for Remotion rendering (verified on macOS 26.6.2).
 - `OPENAI_API_KEY` in the environment for narration (later phases only).
+
+## Explain a branch (one command)
+
+```bash
+npm install
+npm run browser:ensure                # one-time Chrome Headless Shell download
+export OPENAI_API_KEY=sk-...          # required for narration; read from the environment only
+npm run explain                       # inspect -> plan -> narrate -> render -> validate
+```
+
+`npm run explain` (also the `$explain-branch` skill) needs no arguments: it resolves the base,
+plans the scenes, narrates them, renders the MP4, and validates the output. It writes only
+under `artifacts/` and never switches branches or edits tracked files.
+
+Useful flags (full list in
+[`skills/explain-branch/references/flags.md`](skills/explain-branch/references/flags.md)):
+
+| Flag | Meaning |
+| ---- | ------- |
+| `--base <ref>` | comparison base (default: auto-resolved) |
+| `--include-working-tree` | include uncommitted changes |
+| `--max-scenes <n>` | total scenes incl. the summary (default 5) |
+| `--out <path>` | output MP4 (default `artifacts/branch-explainer.mp4`) |
+| `--dry-run` | plan + cost estimate only; no writes |
+| `--stdout` | print the scene plan JSON and stop |
+| `--overwrite` | replace an existing output (default: timestamped) |
+| `--force` | ignore the resume checkpoint |
+
+Repository defaults can be set once in `.explain-branch.json` or `package.json`
+(`explainBranch`): `base`, `maxScenes`, and a `narration` object.
+
+### Outputs, exit codes, and resume
+
+Everything for a run lives in `artifacts/<run-id>/`:
+
+```text
+artifacts/<run-id>/
+  branch-plan.json     # pre-narration checkpoint
+  plan.json            # validated, narrated plan
+  narration.txt        # narration script
+  render-input.json    # props passed to the renderer
+  report.json          # machine-readable run report
+  audio/<scene>.wav    # one clip per scene
+```
+
+The MP4 defaults to `artifacts/branch-explainer.mp4`. stdout carries only the run report JSON;
+progress and the human summary go to stderr.
+
+**Exit codes:** `0` success · `2` base/config could not be resolved · `3` plan failed
+validation · `4` missing/rejected `OPENAI_API_KEY` · the renderer's exit code on render failure
+· `1` other.
+
+**Resume:** a valid `<run-id>/plan.json` is reused and cached clips are skipped, so a failed or
+interrupted render can simply be re-run (`--force` regenerates everything). On failure the run
+directory is kept and a resume command is printed. The run-directory and report schemas are in
+[`skills/explain-branch/references/plan-schema.md`](skills/explain-branch/references/plan-schema.md).
+
+### Limitations
+
+- **TTS needs a key and network.** Without `OPENAI_API_KEY` the run stops before planning
+  (exit `4`); it never renders a silent video in its place.
+- **Large branches may be summarised.** The planner prioritises the most consequential changes
+  and lists what it omitted in the plan/report — it does not narrate every file.
+- **Diagrams are optional** and currently minimal; they never invent components absent from the
+  inspected code.
+- **Read-only by design.** No branch switching, commits, or writes to tracked files; output
+  goes under `artifacts/` (or `--out`).
+- **Code is shown from a snapshot.** Line references are validated against the captured
+  snapshot so highlights cannot silently drift.
 
 ## Inspect a branch
 
@@ -120,6 +195,9 @@ fade in highlight bands; deletions render as diff summaries; the closing scene s
 the branch, its omissions, and caveats.
 
 ## Narrate a video
+
+The one-command flow above runs all of this; the stage CLIs below remain available for
+advanced or manual use.
 
 ```bash
 export OPENAI_API_KEY=sk-...          # required; read from the environment only
@@ -174,8 +252,9 @@ been exercised in a live Codex client (none is installed here). To verify:
    (`git init` is recommended, though not required by Phase 0).
 3. Use the repo marketplace at `.agents/plugins/marketplace.json` (or
    `codex plugin marketplace add .`) to expose the plugin.
-4. Enter `$explain-branch` and confirm the skill activates and the placeholder script
-   runs (see open items in the ADR).
+4. Enter `$explain-branch` and confirm the skill activates and runs
+   `src/cli/explainBranchVideo.ts` (see open items in the ADR). Confirm the exact trigger
+   token and the argv/cwd contract while you are there.
 
 ## Roadmap
 
@@ -185,6 +264,6 @@ been exercised in a live Codex client (none is installed here). To verify:
 | **1 (done)**    | Tested branch-inspection CLI (read-only)   |
 | **2 (done)**    | Validated scene plan JSON                  |
 | **3 (done)**    | Silent video renderer + Shiki highlighting |
-| 4 (in progress) | Narration + synchronization                |
-| 5               | End-to-end integration via the skill       |
+| **4 (done)**    | Narration + synchronization                |
+| **5 (done)**    | End-to-end integration via the skill       |
 | 6               | Quality, robustness, docs                  |

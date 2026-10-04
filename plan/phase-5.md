@@ -184,12 +184,12 @@ directory contract.
 
 ## 8. Documentation
 
-- [ ] Update `README.md`: the one-command quick start, `OPENAI_API_KEY` setup, output layout,
+- [x] Update `README.md`: the one-command quick start, `OPENAI_API_KEY` setup, output layout,
       exit codes, and the privacy/data-transmission note (already present) restated for the
       end-to-end flow.
-- [ ] Document the run directory and report schema so a failed run can be inspected and
+- [x] Document the run directory and report schema so a failed run can be inspected and
       resumed.
-- [ ] Document limitations honestly: large branches may omit changes; TTS requires a key and
+- [x] Document limitations honestly: large branches may omit changes; TTS requires a key and
       network; diagrams are optional; no branch switching or source modification.
 
 **Decision to record:** the single authoritative usage doc and what it must contain.
