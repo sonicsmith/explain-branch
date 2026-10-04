@@ -96,16 +96,16 @@ under `artifacts/` and never switches branches or edits tracked files.
 Useful flags (full list in
 [`skills/explain-branch/references/flags.md`](skills/explain-branch/references/flags.md)):
 
-| Flag | Meaning |
-| ---- | ------- |
-| `--base <ref>` | comparison base (default: auto-resolved) |
-| `--include-working-tree` | include uncommitted changes |
-| `--max-scenes <n>` | total scenes incl. the summary (default 5) |
-| `--out <path>` | output MP4 (default `artifacts/branch-explainer.mp4`) |
-| `--dry-run` | plan + cost estimate only; no writes |
-| `--stdout` | print the scene plan JSON and stop |
-| `--overwrite` | replace an existing output (default: timestamped) |
-| `--force` | ignore the resume checkpoint |
+| Flag                     | Meaning                                               |
+| ------------------------ | ----------------------------------------------------- |
+| `--base <ref>`           | comparison base (default: auto-resolved)              |
+| `--include-working-tree` | include uncommitted changes                           |
+| `--max-scenes <n>`       | total scenes incl. the summary (default 5)            |
+| `--out <path>`           | output MP4 (default `artifacts/branch-explainer.mp4`) |
+| `--dry-run`              | plan + cost estimate only; no writes                  |
+| `--stdout`               | print the scene plan JSON and stop                    |
+| `--overwrite`            | replace an existing output (default: timestamped)     |
+| `--force`                | ignore the resume checkpoint                          |
 
 Repository defaults can be set once in `.explain-branch.json` or `package.json`
 (`explainBranch`): `base`, `maxScenes`, and a `narration` object.
@@ -258,12 +258,12 @@ been exercised in a live Codex client (none is installed here). To verify:
 
 ## Roadmap
 
-| Phase           | Deliverable                                |
-| --------------- | ------------------------------------------ |
-| **0 (done)**    | ADR + invocable plugin skeleton            |
-| **1 (done)**    | Tested branch-inspection CLI (read-only)   |
-| **2 (done)**    | Validated scene plan JSON                  |
-| **3 (done)**    | Silent video renderer + Shiki highlighting |
-| **4 (done)**    | Narration + synchronization                |
-| **5 (done)**    | End-to-end integration via the skill       |
-| 6               | Quality, robustness, docs                  |
+| Phase        | Deliverable                                |
+| ------------ | ------------------------------------------ |
+| **0 (done)** | ADR + invocable plugin skeleton            |
+| **1 (done)** | Tested branch-inspection CLI (read-only)   |
+| **2 (done)** | Validated scene plan JSON                  |
+| **3 (done)** | Silent video renderer + Shiki highlighting |
+| **4 (done)** | Narration + synchronization                |
+| **5 (done)** | End-to-end integration via the skill       |
+| 6            | Quality, robustness, docs                  |
