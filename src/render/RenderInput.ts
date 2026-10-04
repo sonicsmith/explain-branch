@@ -21,6 +21,12 @@ export interface RenderOptions {
   gapMs?: number;
   /** Minimum length for any scene, in ms. */
   minSceneMs?: number;
+  /**
+   * Optional URL prefix for narration clips. When set, clips are referenced as
+   * `<base>/<narrationAudioPath>`; otherwise they resolve through `staticFile()` against
+   * the render's public directory.
+   */
+  audioBaseUrl?: string;
 }
 
 /**
@@ -57,6 +63,7 @@ export interface ResolvedRenderOptions {
   tailMs: number;
   gapMs: number;
   minSceneMs: number;
+  audioBaseUrl?: string;
 }
 
 export function resolveRenderOptions(
@@ -73,6 +80,9 @@ export function resolveRenderOptions(
     tailMs: options.tailMs ?? DEFAULT_RENDER_OPTIONS.tailMs,
     gapMs: options.gapMs ?? DEFAULT_RENDER_OPTIONS.gapMs,
     minSceneMs: options.minSceneMs ?? DEFAULT_RENDER_OPTIONS.minSceneMs,
+    ...(options.audioBaseUrl !== undefined
+      ? { audioBaseUrl: options.audioBaseUrl }
+      : {}),
   };
 }
 

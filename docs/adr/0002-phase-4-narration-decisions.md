@@ -204,11 +204,47 @@ FFprobe to be downloadable on first use.
 
 ---
 
+## Decision 4 — Audio playback, captions, and asset resolution
+
+**Decision.**
+
+- **Asset resolution:** Remotion runs in the browser and cannot read arbitrary files off disk,
+  so clips are served through the public directory. The composition references each scene's clip
+  with `staticFile(scene.narrationAudioPath)`, and renders pass the **repository root** as
+  `--public-dir`. Because §2 records paths repository-relative
+  (`artifacts/<run-id>/audio/<scene-id>.wav`), that path is exactly the `staticFile()` argument.
+  `resolveAudioSrc()` also accepts an `options.audioBaseUrl` override for hosted/SSR renders
+  (`<base>/<path>`), carried through `--props=<file>` when present. Absolute paths are not
+  supported by Remotion and are not used.
+- **Playback:** each scene's clip plays with Remotion's `<Audio>` inside the scene `<Sequence>`,
+  wrapped in an inner `<Sequence from={narrationStartFrame}>` so speech begins after the
+  configurable visual lead-in. `volume` is fixed at `1` for every scene (single provider/voice),
+  so loudness is consistent; no scene cuts speech off because the timeline guarantees the scene
+  is at least the clip plus the tail.
+- **Captions:** OpenAI TTS returns no word or segment timings, so captions are chunked **by
+  sentence** with the measured clip duration distributed across sentences **proportionally to
+  character count** (option (a)). This tracks the audio approximately and honestly; scenes with
+  no measured narration fall back to option (b) — the whole line for the scene duration.
+- **Determinism:** the composition reads only `plan` + `sources` + options (no `fs`), so a render
+  is reproducible from the stored plan and clips.
+
+**Implemented in** `src/render/audioSource.ts`, `src/render/captions.ts`,
+`src/render/SceneRenderer.tsx`, and `src/render/components/SceneChrome.tsx`; the per-scene
+narration offset comes from `src/render/timeline.ts` (`narrationStartFrame`).
+
+**Render note.** Audio requires the public dir to point at the repository root, for example
+`npx remotion render src/render/index.ts ExplainBranch <out.mp4> --public-dir=. --props=<run>/plan.json`.
+
+**Consequences.** The plan and run directory are self-contained, but a render must be told the
+public dir (the default `public/` will not resolve clips). Caption timing is an approximation,
+labelled as such, rather than exact word alignment.
+
+---
+
 ## Decisions pending
 
 Recorded here as their tasks are implemented:
 
-- §4 — audio asset resolution strategy, caption timing approach.
 - §5 — retry policy, TTS concurrency limit, overwrite rule.
 - §6 — what is transmitted, and the redaction rules applied first.
 - §7 — how the TTS provider is abstracted so tests need no network.

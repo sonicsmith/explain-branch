@@ -66,6 +66,8 @@ test("narrated scenes run for lead-in + narration + tail", () => {
   // ceil(3.25 * 30) = ceil(97.5) = 98
   assert.equal(timing?.durationInFrames, 98);
   assert.equal(timing?.narrated, true);
+  // A 500 ms lead-in at 30 fps = 15 frames before the clip starts.
+  assert.equal(timing?.narrationStartFrame, 15);
   assert.equal(timeline.durationInFrames, 98);
 });
 
@@ -93,6 +95,7 @@ test("falls back to secondsPerScene for scenes without narration", () => {
   );
   assert.equal(timeline.scenes[0]?.narrated, false);
   assert.equal(timeline.scenes[0]?.narrationMs, null);
+  assert.equal(timeline.scenes[0]?.narrationStartFrame, 0);
   assert.equal(timeline.scenes[0]?.durationMs, 8000);
   assert.equal(timeline.scenes[0]?.durationInFrames, 240);
 });

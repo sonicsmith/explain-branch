@@ -1,4 +1,8 @@
+import { Audio, Sequence } from "remotion";
 import type { ExplainerPlan, ExplainerScene } from "../planning/types.ts";
+import { resolveAudioSrc } from "./audioSource.ts";
+import { buildSceneCaptions } from "./captions.ts";
+import type { SceneTiming } from "./timeline.ts";
 import { SceneChrome } from "./components/SceneChrome.tsx";
 import { ArchitectureScene } from "./scenes/ArchitectureScene.tsx";
 import { CodeWalkthroughScene } from "./scenes/CodeWalkthroughScene.tsx";
@@ -11,25 +15,57 @@ export interface SceneRendererProps {
   sources: Record<string, string>;
   index: number;
   total: number;
+  /** Timing for this scene from the narration-driven timeline. */
+  timeline: SceneTiming | undefined;
   sceneStartFrame: number;
   showCaptions: boolean;
+  fps: number;
+  audioBaseUrl?: string;
 }
 
 export function SceneRenderer(props: SceneRendererProps) {
-  const { scene, plan, sources, index, total, sceneStartFrame, showCaptions } =
-    props;
+  const {
+    scene,
+    plan,
+    sources,
+    index,
+    total,
+    timeline,
+    sceneStartFrame,
+    showCaptions,
+    fps,
+    audioBaseUrl,
+  } = props;
+
+  const captions = buildSceneCaptions(scene, timeline, fps);
+
+  const audioSrc =
+    scene.narrationAudioPath !== undefined
+      ? resolveAudioSrc(
+          scene.narrationAudioPath,
+          audioBaseUrl !== undefined ? { audioBaseUrl } : {},
+        )
+      : null;
 
   return (
-    <SceneChrome
-      title={scene.title}
-      index={index}
-      total={total}
-      sceneStartFrame={sceneStartFrame}
-      caption={scene.narrationText}
-      showCaption={showCaptions}
-    >
-      {renderSceneContent(scene, plan, sources)}
-    </SceneChrome>
+    <>
+      {audioSrc !== null ? (
+        // Start the clip after the visual lead-in so the code settles before the first words.
+        <Sequence from={timeline?.narrationStartFrame ?? 0}>
+          <Audio src={audioSrc} volume={1} name={`narration-${scene.id}`} />
+        </Sequence>
+      ) : null}
+      <SceneChrome
+        title={scene.title}
+        index={index}
+        total={total}
+        sceneStartFrame={sceneStartFrame}
+        captions={captions}
+        showCaption={showCaptions}
+      >
+        {renderSceneContent(scene, plan, sources)}
+      </SceneChrome>
+    </>
   );
 }
 

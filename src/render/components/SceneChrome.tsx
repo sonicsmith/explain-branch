@@ -6,13 +6,14 @@ import {
   useVideoConfig,
 } from "remotion";
 import { layout, theme } from "../theme.ts";
+import type { CaptionChunk } from "../captions.ts";
 
 export interface SceneChromeProps {
   title: string;
   index: number;
   total: number;
   sceneStartFrame: number;
-  caption: string;
+  captions: CaptionChunk[];
   showCaption: boolean;
   children: ReactNode;
 }
@@ -23,7 +24,7 @@ export function SceneChrome({
   index,
   total,
   sceneStartFrame,
-  caption,
+  captions,
   showCaption,
   children,
 }: SceneChromeProps) {
@@ -34,10 +35,26 @@ export function SceneChrome({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const captionOpacity = interpolate(frame, [26, 48], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+
+  const activeCaption =
+    showCaption && captions.length > 0
+      ? (captions.find(
+          (chunk) =>
+            frame >= chunk.fromFrame &&
+            frame < chunk.fromFrame + chunk.durationInFrames,
+        ) ??
+        captions[captions.length - 1] ??
+        null)
+      : null;
+  const captionOpacity =
+    activeCaption === null
+      ? 0
+      : interpolate(
+          frame,
+          [activeCaption.fromFrame, activeCaption.fromFrame + 8],
+          [0, 1],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" },
+        );
 
   const globalFrame = sceneStartFrame + frame;
   const overall = Math.min(
@@ -94,7 +111,7 @@ export function SceneChrome({
         {children}
       </div>
 
-      {showCaption ? (
+      {activeCaption !== null ? (
         <div
           style={{
             position: "absolute",
@@ -114,7 +131,7 @@ export function SceneChrome({
               lineHeight: 1.4,
             }}
           >
-            {caption}
+            {activeCaption.text}
           </div>
         </div>
       ) : null}

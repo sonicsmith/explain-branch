@@ -51,6 +51,8 @@ export interface SceneTiming {
   durationMs: number;
   /** Narration duration in ms, or `null` when the scene is silent. */
   narrationMs: number | null;
+  /** Offset within the scene, in frames, where narration playback begins (the lead-in). */
+  narrationStartFrame: number;
   narrated: boolean;
 }
 
@@ -108,6 +110,10 @@ export function buildTimeline(
       startMs: Math.round((fromFrame / options.fps) * 1000),
       durationMs: Math.round(durationMs),
       narrationMs,
+      narrationStartFrame:
+        narrationMs !== null
+          ? Math.round((options.leadInMs / 1000) * options.fps)
+          : 0,
       narrated: narrationMs !== null,
     });
     fromFrame += durationInFrames;

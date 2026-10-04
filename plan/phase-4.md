@@ -111,19 +111,25 @@ defaults.
 
 ## 4. Renderer changes (playback, timing, captions)
 
-- [ ] Play each scene's clip with Remotion's `<Audio>` inside its `<Sequence>`, resolving the
+- [x] Play each scene's clip with Remotion's `<Audio>` inside its `<Sequence>`, resolving the
       path (recommend `staticFile()` for bundled assets, or an absolute/file URL for
       run-directory clips — decide and document which).
-- [ ] Verify how props and assets reach the renderer: confirm whether audio files must be
+      → `staticFile()` + `--public-dir=<repo-root>` in [`../src/render/audioSource.ts`](../src/render/audioSource.ts) / [`../src/render/SceneRenderer.tsx`](../src/render/SceneRenderer.tsx); ADR 0002 (Decision 4).
+- [x] Verify how props and assets reach the renderer: confirm whether audio files must be
       bundled (`--public-dir` / `staticFile`) or can be referenced by absolute path when
       rendering locally, and confirm behavior with `--props=<file>`.
-- [ ] Drive per-scene `durationInFrames` from the measured duration; add a configurable visual
+      → confirmed: Remotion runs in the browser, absolute paths unsupported; clips are served via `--public-dir`; ADR 0002 (Decision 4).
+- [x] Drive per-scene `durationInFrames` from the measured duration; add a configurable visual
       lead-in so the code scroll/highlight finishes before or during the first words.
-- [ ] Align captions with the audio: OpenAI TTS does not return word/segment timings, so decide
+      → `narrationStartFrame` lead-in in [`../src/render/timeline.ts`](../src/render/timeline.ts); audio offset in [`../src/render/SceneRenderer.tsx`](../src/render/SceneRenderer.tsx).
+- [x] Align captions with the audio: OpenAI TTS does not return word/segment timings, so decide
       between (a) proportional per-sentence chunks using the clip duration, or (b) showing the
       full line for the scene duration. Record the trade-off; prefer (a) if it stays honest.
-- [ ] Confirm audio level consistency across scenes (§9) and that no scene cuts speech off.
-- [ ] Keep the composition deterministic and re-runnable from stored plan + clips.
+      → option (a) in [`../src/render/captions.ts`](../src/render/captions.ts); ADR 0002 (Decision 4).
+- [x] Confirm audio level consistency across scenes (§9) and that no scene cuts speech off.
+      → uniform `volume={1}`; timeline guarantees scene ≥ clip + tail; ADR 0002 (Decision 4).
+- [x] Keep the composition deterministic and re-runnable from stored plan + clips.
+      → composition reads only plan + sources + options (no `fs`); ADR 0002 (Decision 4).
 
 **Decision to record:** audio asset resolution strategy and the caption timing approach.
 

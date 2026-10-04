@@ -40,8 +40,13 @@ export function ExplainerVideo(input: RenderInput) {
               sources={input.sources}
               index={index}
               total={scenes.length}
+              timeline={timing}
               sceneStartFrame={from}
               showCaptions={options.showCaptions}
+              fps={timeline.fps}
+              {...(options.audioBaseUrl !== undefined
+                ? { audioBaseUrl: options.audioBaseUrl }
+                : {})}
             />
           </Sequence>
         );
