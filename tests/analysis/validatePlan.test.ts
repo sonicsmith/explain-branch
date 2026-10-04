@@ -211,3 +211,33 @@ test("requires narration audio when asked to", () => {
     /narrationAudioPath/,
   );
 });
+
+test("requires a positive narration duration when narration audio is required", () => {
+  for (const duration of [undefined, 0, -1, "1000"]) {
+    const plan = validPlan();
+    plan.scenes[0].narrationAudioPath = "artifacts/run/audio/scene-1.wav";
+    plan.scenes[0].narrationDurationMs = duration;
+    const result = validatePlan(plan as ExplainerPlan, {
+      snapshot: SNAPSHOT,
+      requireNarrationAudio: true,
+    });
+    assert.equal(result.valid, false, `duration=${String(duration)}`);
+    assert.match(
+      result.errors.map((issue) => issue.path).join("\n"),
+      /narrationDurationMs/,
+    );
+  }
+});
+
+test("accepts narration audio metadata when every scene has it", () => {
+  const plan = validPlan();
+  for (const scene of plan.scenes) {
+    scene.narrationAudioPath = `artifacts/run/audio/${scene.id}.wav`;
+    scene.narrationDurationMs = 1500;
+  }
+  const result = validatePlan(plan as ExplainerPlan, {
+    snapshot: SNAPSHOT,
+    requireNarrationAudio: true,
+  });
+  assert.equal(result.valid, true, JSON.stringify(result.errors));
+});

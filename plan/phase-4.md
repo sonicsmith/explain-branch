@@ -170,16 +170,23 @@ defaults.
 
 ## 7. Testing
 
-- [ ] Unit-test the WAV duration parser against known headers (including odd chunk sizes).
-- [ ] Unit-test the timeline math: lead-in/tail/gap, rounding, minimum length, and that
+- [x] Unit-test the WAV duration parser against known headers (including odd chunk sizes).
+      → [`../tests/narration/wav.test.ts`](../tests/narration/wav.test.ts) (round-trip, odd chunk + padding, non-WAV).
+- [x] Unit-test the timeline math: lead-in/tail/gap, rounding, minimum length, and that
       `sum(sceneFrames)` equals `durationInFrames`.
-- [ ] Test the retry/backoff policy with a fault-injecting fake client (no network).
-- [ ] Test the missing-credential path asserts a clear message and a non-zero exit.
-- [ ] Add a **fake TTS provider** so the whole narrate → plan → timeline path is tested
+      → [`../tests/render/timeline.test.ts`](../tests/render/timeline.test.ts).
+- [x] Test the retry/backoff policy with a fault-injecting fake client (no network).
+      → [`../tests/narration/retry.test.ts`](../tests/narration/retry.test.ts); ADR 0002 (Decision 7).
+- [x] Test the missing-credential path asserts a clear message and a non-zero exit.
+      → [`../tests/cli/narrateBranch.test.ts`](../tests/cli/narrateBranch.test.ts) (exit 4); dry run exits 0.
+- [x] Add a **fake TTS provider** so the whole narrate → plan → timeline path is tested
       deterministically offline; use real recorded silence in place of clips.
-- [ ] Keep the existing `requireNarrationAudio` validator tests; extend them for the new checks.
-- [ ] Add a manual smoke test: one real narrated render of the fixture (requires
+      → [`../src/narration/fakeSpeechProvider.ts`](../src/narration/fakeSpeechProvider.ts) + [`../tests/narration/pipeline.test.ts`](../tests/narration/pipeline.test.ts); ADR 0002 (Decision 7).
+- [x] Keep the existing `requireNarrationAudio` validator tests; extend them for the new checks.
+      → `requireNarrationAudio` duration cases in [`../tests/analysis/validatePlan.test.ts`](../tests/analysis/validatePlan.test.ts) + audio-layer [`../tests/narration/validateNarration.test.ts`](../tests/narration/validateNarration.test.ts).
+- [x] Add a manual smoke test: one real narrated render of the fixture (requires
       `OPENAI_API_KEY` and network) — documented as manual, not part of `npm test`.
+      → [`../docs/manual-smoke-test.md`](../docs/manual-smoke-test.md); ADR 0002 (Decision 7).
 
 **Decision to record:** how the TTS provider is abstracted so tests need no network.
 

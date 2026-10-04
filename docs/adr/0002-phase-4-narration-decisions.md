@@ -303,8 +303,39 @@ repository content.
 
 ---
 
+## Decision 7 — Test strategy for narration (offline by default)
+
+**Decision.**
+
+- The TTS provider is abstracted behind the `SpeechProvider` interface
+  (`src/narration/provider.ts`). The only implementation that imports the `openai` SDK is
+  `openaiSpeechProvider.ts`; the narration stage depends on the interface, not the SDK.
+- Tests use `FakeSpeechProvider` (`src/narration/fakeSpeechProvider.ts`), which records each
+  request and returns **real silence WAV** built by `createSilenceWav()`, so the full
+  narrate → plan → timeline path runs deterministically with no network and no credentials
+  (`tests/narration/pipeline.test.ts`).
+- FFprobe is likewise injected (`measureDuration` / `ffprobe`), so duration tests never spawn a
+  process.
+- The missing-credential path is covered at the CLI boundary by spawning
+  `src/cli/narrateBranch.ts` with `OPENAI_API_KEY` unset and asserting exit code `4` plus a clear
+  message (`tests/cli/narrateBranch.test.ts`).
+- The one test that needs the real API is the manual smoke test in
+  `docs/manual-smoke-test.md`, explicitly excluded from `npm test`.
+
+**Existing coverage.** WAV parser (`tests/narration/wav.test.ts`), timeline math
+(`tests/render/timeline.test.ts`), retry/backoff with a fault-injecting provider
+(`tests/narration/retry.test.ts`), credential handling (`tests/narration/credentials.test.ts`),
+redaction (`tests/narration/redact.test.ts`), audio-layer validation
+(`tests/narration/validateNarration.test.ts`), output naming
+(`tests/render/outputPath.test.ts`), captions/assets (`tests/render/captions.test.ts`,
+`tests/render/audioSource.test.ts`), and the extended `requireNarrationAudio` checks
+(`tests/analysis/validatePlan.test.ts`).
+
+**Consequences.** `npm test` is fully offline and hermetic; only the manual smoke test touches
+the network.
+
+---
+
 ## Decisions pending
 
-Recorded here as their tasks are implemented:
-
-- §7 — how the TTS provider is abstracted so tests need no network.
+All Phase 4 decisions are recorded above.

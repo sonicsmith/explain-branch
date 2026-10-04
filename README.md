@@ -136,6 +136,9 @@ skips unchanged scenes and a failed render resumes without re-billing. Missing o
 credentials stop with a clear message and a non-zero exit. Rendering audio requires
 `--public-dir` pointing at the repository root so Remotion can serve the clips.
 
+See [`docs/manual-smoke-test.md`](docs/manual-smoke-test.md) for the manual, real-API smoke
+test (not part of `npm test`).
+
 ### Privacy and AI-voice disclosure
 
 - **What is sent:** the narration text for each scene (derived from the diff) is transmitted to
