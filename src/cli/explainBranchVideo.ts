@@ -18,10 +18,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BaseResolutionError } from "../analysis/buildChangeInventory.ts";
-import {
-  getBranchState,
-  resolveRepositoryRoot,
-} from "../git/inspectBranch.ts";
+import { getBranchState, resolveRepositoryRoot } from "../git/inspectBranch.ts";
 import {
   NarrationConfigError,
   resolveNarrationConfig,
@@ -118,7 +115,7 @@ machine-readable result (the run report JSON; the plan JSON with --stdout; a JSO
 with --dry-run).
 
 Defaults can be set per repository in .explain-branch.json or package.json
-(`explainBranch`): `base`, `maxScenes`, and `narration`. Precedence for narration is
+(\`explainBranch\`): \`base\`, \`maxScenes\`, and \`narration\`. Precedence for narration is
 CLI flag > .explain-branch.json > package.json > EXPLAIN_BRANCH_TTS_* env > built-in.
 
 Exit codes: 0 success, 2 base/config could not be resolved, 3 plan failed validation,
@@ -524,7 +521,10 @@ async function main(): Promise<void> {
     }
 
     // Save the narration script alongside the plan and render input (§14.9).
-    const narrationScriptPath = await writeNarrationScript(runDir, narratedPlan);
+    const narrationScriptPath = await writeNarrationScript(
+      runDir,
+      narratedPlan,
+    );
 
     log("[4/5] Rendering the video...");
     const render = await runRender({
