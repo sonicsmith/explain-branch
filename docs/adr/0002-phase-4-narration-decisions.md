@@ -232,8 +232,12 @@ FFprobe to be downloadable on first use.
 `src/render/SceneRenderer.tsx`, and `src/render/components/SceneChrome.tsx`; the per-scene
 narration offset comes from `src/render/timeline.ts` (`narrationStartFrame`).
 
-**Render note.** Audio requires the public dir to point at the repository root, for example
-`npx remotion render src/render/index.ts ExplainBranch <out.mp4> --public-dir=. --props=<run>/plan.json`.
+**Render note.** The composition consumes a full `RenderInput` (`{ plan, sources, options }`),
+not a bare plan — Remotion shallow-merges `defaultProps`, so passing a plan alone silently falls
+back to the fixture. `src/cli/renderBranch.ts` (`npm run render:narrated`) captures the plan's
+source files, writes `<plan-dir>/render-input.json`, and renders with the repository root as the
+public dir, e.g.
+`npm run render:narrated -- --plan artifacts/<run>/plan.json`.
 
 **Consequences.** The plan and run directory are self-contained, but a render must be told the
 public dir (the default `public/` will not resolve clips). Caption timing is an approximation,

@@ -8,8 +8,8 @@ import { sampleInput } from "./fixtures/sampleInput.ts";
 import { Composition, type AnyZodObject } from "remotion";
 
 /**
- * Registered compositions. `ExplainBranch` renders the fixture plan by default; pass
- * `--props=<file>` to render a plan produced by `npm run plan`.
+ * Registered compositions. `ExplainBranch` renders the fixture plan by default; use
+ * `npm run render:narrated` (which passes a full `RenderInput` via `--props=<file>`).
  */
 export function RemotionRoot() {
   const options = resolveRenderOptions(sampleInput.options);

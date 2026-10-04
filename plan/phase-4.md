@@ -149,7 +149,7 @@ defaults.
       → per-scene clip + sidecar writes; cache-aware re-runs; CLI reports kept clips; ADR 0002 (Decision 5).
 - [x] Ensure the final MP4 is written without silently overwriting an existing output
       (timestamped name or explicit confirmation, per §2/§15).
-      → [`../src/render/outputPath.ts`](../src/render/outputPath.ts) (`resolveOutputPath`) + `--overwrite=false` in `npm run render:narrated`; ADR 0002 (Decision 5).
+      → [`../src/render/outputPath.ts`](../src/render/outputPath.ts) (`resolveOutputPath`) used by the render CLI (`npm run render:narrated`) with `--overwrite=false`; ADR 0002 (Decision 5).
 
 **Decision to record:** retry policy, concurrency limit for TTS calls, and the overwrite rule.
 

@@ -127,14 +127,18 @@ npm run narrate                       # writes artifacts/<branch>/plan.json + au
 npm run narrate -- --dry-run          # scenes, character counts, estimated cost (no API calls)
 npm run narrate -- --scene scene-2    # regenerate a single clip
 npm run narrate -- --force            # regenerate every clip
-npm run render:narrated -- --props=artifacts/<branch>/plan.json
+npm run render:narrated -- --plan artifacts/<run>/plan.json
 ```
 
 `npm run narrate` generates one audio clip per scene, measures each clip's real duration, and
 writes a plan whose scene lengths are driven by that audio. Clips are cached, so re-running
 skips unchanged scenes and a failed render resumes without re-billing. Missing or rejected
-credentials stop with a clear message and a non-zero exit. Rendering audio requires
-`--public-dir` pointing at the repository root so Remotion can serve the clips.
+credentials stop with a clear message and a non-zero exit.
+
+`npm run render:narrated` assembles the full Remotion props (`{ plan, sources, options }`) by
+capturing the source files the plan references, writes them to `<plan-dir>/render-input.json`,
+and renders with the repository root as the public dir so audio clips resolve. It never
+overwrites an existing MP4 unless you pass `--overwrite`.
 
 See [`docs/manual-smoke-test.md`](docs/manual-smoke-test.md) for the manual, real-API smoke
 test (not part of `npm test`).

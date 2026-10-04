@@ -35,10 +35,11 @@ npm run browser:ensure            # one-time Chrome Headless Shell download
    `artifacts/<branch>/plan.json` with `narrationAudioPath` + `narrationDurationMs`, and a
    final `Validated: N scene(s) with narration audio.` line.
 
-4. Render the video. Audio requires the public dir to be the repository root:
+4. Render the video (the CLI captures sources, writes `render-input.json`, and uses the
+   repository root as the public dir so clips resolve):
 
    ```bash
-   npm run render:narrated -- --props=artifacts/<branch>/plan.json
+   npm run render:narrated -- --plan artifacts/<branch>/plan.json
    ```
 
 5. Check the output MP4 (`artifacts/branch-explainer.mp4`):
