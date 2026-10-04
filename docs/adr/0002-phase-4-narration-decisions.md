@@ -132,11 +132,48 @@ not), and whether to disable them in favour of the app-level policy (§5).
 
 ---
 
+## Decision 2 — Audio generation pipeline (clip format, layout, cache)
+
+**Decision.**
+
+- **One clip per scene**, so retries and re-renders are cheap and independent (plan §10).
+- **Format:** the resolved `config.format` (default `wav`); the clip extension follows it.
+  WAV is required for now because duration is read from the RIFF header; other formats are
+  rejected with a clear message until the FFprobe fallback lands (§3).
+- **On-disk layout:** `<run-dir>/audio/<sanitized-scene-id>.<format>` plus a sidecar
+  `<clip>.json` holding
+  `{ cacheKey, sceneId, format, model, voice, characters, durationMs, generatedAt }`. The
+  default run dir is `artifacts/<run-id>/audio`, where `<run-id>` defaults to the sanitized
+  branch name so re-runs reuse clips.
+- **Path recorded in the plan:** repository-relative POSIX (for example
+  `artifacts/<run-id>/audio/scene-1.wav`), so the plan stays portable and the renderer resolves
+  it against the repository root.
+- **Cache key:** `sha256(JSON.stringify({ provider, model, voice, instructions: string | null,
+format, text }))`. A scene is skipped when the sidecar's key matches and the clip exists and
+  is non-empty; `--force` (or naming a scene with `--scene`) bypasses this.
+- **Idempotent and resumable:** clips and sidecars are written per scene, so a later failure
+  leaves earlier clips in place and a retry resumes rather than restarting.
+- **Fail loudly:** a scene whose narration exceeds the 4096-character request limit aborts
+  with a clear message (never truncated); an empty provider response is an error.
+- **Sequential generation** for now; the TTS concurrency limit is decided in §5.
+
+**Implemented in** `src/narration/narratePlan.ts`, with the provider abstraction in
+`provider.ts` / `openaiSpeechProvider.ts`, the offline `fakeSpeechProvider.ts`, the WAV reader
+in `wav.ts`, and cost/`--dry-run` estimation in `estimate.ts`. The CLI entry point is
+`src/cli/narrateBranch.ts` (`npm run narrate`).
+
+**Consequences.**
+
+- Re-running `npm run narrate` is cheap: matching clips are reused and never re-billed.
+- The plan points at clips by relative path, so the plan and run directory can move together.
+- Non-WAV formats are temporarily unusable until §3 adds FFprobe duration measurement.
+
+---
+
 ## Decisions pending
 
 Recorded here as their tasks are implemented:
 
-- §2 — clip format, on-disk layout, plan path recording, cache key.
 - §3 — duration source of truth, rounding rule, lead-in/tail/gap defaults.
 - §4 — audio asset resolution strategy, caption timing approach.
 - §5 — retry policy, TTS concurrency limit, overwrite rule.

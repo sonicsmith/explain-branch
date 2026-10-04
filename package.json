@@ -9,6 +9,7 @@
     "hello": "node skills/explain-branch/scripts/hello.ts",
     "inspect": "node src/cli/explainBranch.ts",
     "plan": "node src/cli/planBranch.ts",
+    "narrate": "node src/cli/narrateBranch.ts",
     "studio": "remotion studio src/render/index.ts",
     "render:fixture": "remotion render src/render/index.ts ExplainBranch artifacts/render-fixture.mp4",
     "test": "node --test \"tests/**/*.test.ts\"",

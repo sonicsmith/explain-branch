@@ -60,19 +60,25 @@ missing-credential behavior.
 
 ## 2. Audio generation pipeline
 
-- [ ] Add a narration stage (suggested `src/narration/`) that takes a validated plan and
+- [x] Add a narration stage (suggested `src/narration/`) that takes a validated plan and
       returns the plan with `narrationAudioPath` + `narrationDurationMs` filled in.
-- [ ] Generate **one clip per scene** (per §10) so retries and re-renders are cheap and
+      → [`../src/narration/narratePlan.ts`](../src/narration/narratePlan.ts).
+- [x] Generate **one clip per scene** (per §10) so retries and re-renders are cheap and
       independent.
-- [ ] Store clips under the run directory: `artifacts/<run-id>/audio/<scene-id>.wav`
+      → sequential per-scene generation in `narratePlan`; ADR 0002 (Decision 2).
+- [x] Store clips under the run directory: `artifacts/<run-id>/audio/<scene-id>.wav`
       (aligns with ADR Decision 5). Decide how the path is recorded in the plan — recommend
       relative to the repository root so the plan stays portable and the renderer can resolve it.
-- [ ] Make generation **idempotent and cache-aware**: skip a scene when an identical clip
+      → `<run-dir>/audio/<scene-id>.<format>`; path recorded repo-relative POSIX; ADR 0002 (Decision 2).
+- [x] Make generation **idempotent and cache-aware**: skip a scene when an identical clip
       already exists (hash of text + model + voice + instructions + format), so a failed render
       never re-bills for audio it already has.
-- [ ] Add `--dry-run` that reports the scenes, character counts, and estimated cost without
+      → SHA-256 cache key + per-clip sidecar in [`../src/narration/narratePlan.ts`](../src/narration/narratePlan.ts); ADR 0002 (Decision 2).
+- [x] Add `--dry-run` that reports the scenes, character counts, and estimated cost without
       calling the API.
-- [ ] Add a `--scene <id>` / `--force` affordance to regenerate a single clip.
+      → `--dry-run` in [`../src/cli/narrateBranch.ts`](../src/cli/narrateBranch.ts); [`../src/narration/estimate.ts`](../src/narration/estimate.ts).
+- [x] Add a `--scene <id>` / `--force` affordance to regenerate a single clip.
+      → `--scene` / `--force` in [`../src/cli/narrateBranch.ts`](../src/cli/narrateBranch.ts).
 
 **Decision to record:** clip format, on-disk layout, how the path is recorded in the plan, and
 the cache key.
