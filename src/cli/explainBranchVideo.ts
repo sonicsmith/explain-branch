@@ -19,6 +19,7 @@ import { BaseResolutionError } from "../analysis/buildChangeInventory.ts";
 import { resolveRepositoryRoot } from "../git/inspectBranch.ts";
 import {
   NarrationConfigError,
+  resolveNarrationConfig,
   type NarrationConfigOverrides,
 } from "../narration/config.ts";
 import {
@@ -28,6 +29,7 @@ import {
 import type { NarrationProgressEvent } from "../narration/narratePlan.ts";
 import { validateNarratedPlan } from "../narration/validateNarration.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
+import { readConfiguredMaxScenes } from "../pipeline/projectConfig.ts";
 import {
   PlanValidationError,
   resolveRunDir,
@@ -48,6 +50,7 @@ interface CliOptions {
   force: boolean;
   overwrite: boolean;
   dryRun: boolean;
+  stdout: boolean;
   overrides: NarrationConfigOverrides;
   help: boolean;
 }
@@ -60,7 +63,8 @@ Usage:
 Options:
   --base <ref>             Compare against this ref (default: auto-resolved)
   --include-working-tree   Include uncommitted working-tree changes (default: false)
-  --max-scenes <n>         Total scenes including the summary (default: 5)
+  --max-scenes <n>         Total scenes including the summary (default: 5, or the project config)
+  --stdout                 Print the scene plan JSON to stdout and stop (no narration/render)
   --run-id <id>            Run directory name (default: the branch name)
   --run-dir <path>         Explicit run directory (default: <repo>/artifacts/<run-id>)
   --out <path>             Output MP4 (default: <repo>/artifacts/branch-explainer.mp4)
@@ -77,6 +81,10 @@ Options:
 
 Artifacts are written under the run directory: branch-plan.json, plan.json (narrated),
 audio/<scene>.wav, and render-input.json. Narration requires OPENAI_API_KEY.
+
+Defaults can be set per repository in .explain-branch.json or package.json
+(`explainBranch`): `base`, `maxScenes`, and `narration`. Precedence for narration is
+CLI flag > .explain-branch.json > package.json > EXPLAIN_BRANCH_TTS_* env > built-in.
 
 Exit codes: 0 success, 2 base/config could not be resolved, 3 plan failed validation,
 4 missing/rejected credentials, 1 other error.
@@ -97,6 +105,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
     force: false,
     overwrite: false,
     dryRun: false,
+    stdout: false,
     overrides: {},
     help: false,
   };
@@ -131,6 +140,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case "--dry-run":
         options.dryRun = true;
+        break;
+      case "--stdout":
+        options.stdout = true;
         break;
       case "--base":
         options.base = takeValue();
@@ -268,6 +280,12 @@ async function main(): Promise<void> {
       options.repoPath ?? process.cwd(),
     );
 
+    // Project config supplies a default max-scenes; an explicit flag wins.
+    const maxScenes =
+      options.maxScenes ??
+      (await readConfiguredMaxScenes(repositoryRoot)) ??
+      undefined;
+
     log("[1/5] Inspecting the branch...");
     const inventory = await runInspect({
       ...(options.repoPath !== undefined ? { repoPath: options.repoPath } : {}),
@@ -303,6 +321,20 @@ async function main(): Promise<void> {
       }`,
     );
     log(`Run dir:      ${runDir}`);
+    log(
+      `Scenes:       up to ${maxScenes ?? 5} (including the summary)`,
+    );
+
+    // --stdout is a plan-only mode: no narration, no render, and no files written.
+    if (options.stdout) {
+      log("[2/5] Building a scene plan (stdout)...");
+      const { plan } = await runPlan({
+        inventory,
+        ...(maxScenes !== undefined ? { maxScenes } : {}),
+      });
+      process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
+      return;
+    }
 
     let narratedPlan: ExplainerPlan | null = null;
 
@@ -315,12 +347,20 @@ async function main(): Promise<void> {
     }
 
     if (narratedPlan === null) {
+      // Resolve the narration config once (offline, validated) and pass it to the narration
+      // stage, so the precedence chain is applied in exactly one place.
+      const { config } = await resolveNarrationConfig({
+        repositoryRoot,
+        overrides: options.overrides,
+      });
+      log(
+        `Narration:    ${config.voice} (${config.model}, ${config.format})`,
+      );
+
       log("[2/5] Building a scene plan...");
       const { plan } = await runPlan({
         inventory,
-        ...(options.maxScenes !== undefined
-          ? { maxScenes: options.maxScenes }
-          : {}),
+        ...(maxScenes !== undefined ? { maxScenes } : {}),
       });
 
       // Checkpoint the pre-narration plan so a failed narration can resume without re-planning.
@@ -340,7 +380,7 @@ async function main(): Promise<void> {
         plan,
         runDir,
         relativeAudioDir,
-        overrides: options.overrides,
+        config,
         ...(options.force ? { force: true } : {}),
         ...(options.dryRun ? { dryRun: true } : {}),
         planPath,

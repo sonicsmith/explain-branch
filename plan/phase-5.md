@@ -66,7 +66,7 @@ directory contract.
 
 ## 2. Configuration surface and precedence
 
-- [ ] Expose one flag set on the orchestrator, mapping to the existing stage options where
+- [x] Expose one flag set on the orchestrator, mapping to the existing stage options where
       they already exist and adding only what is missing (§11). Suggested surface:
 
       | Flag | Maps to | Default |
@@ -81,13 +81,13 @@ directory contract.
       | `--overwrite` | allow replacing existing outputs | `false` |
       | `--stdout` | print the plan instead of writing | `false` |
 
-- [ ] Apply the documented precedence for narration config: CLI flag > `.explain-branch.json`
+- [x] Apply the documented precedence for narration config: CLI flag > `.explain-branch.json`
       `narration` > `package.json` `explainBranch.narration` > `EXPLAIN_BRANCH_TTS_*` env >
       built-in defaults. `resolveNarrationConfig` already implements this — call it once and
       pass the resolved config to the narration stage.
-- [ ] Extend project config to carry a default **base** and **max-scenes** if not already
+- [x] Extend project config to carry a default **base** and **max-scenes** if not already
       covered by `explainBranch.base`, so a repo can set defaults once.
-- [ ] Keep the basic command argument-free: defaults must produce a complete narrated video.
+- [x] Keep the basic command argument-free: defaults must produce a complete narrated video.
 
 **Decision to record:** the exact flag names, defaults, and precedence table.
 
