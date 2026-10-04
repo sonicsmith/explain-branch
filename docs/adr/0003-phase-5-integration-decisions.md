@@ -4,8 +4,8 @@
 - **Date:** 2026-10-04
 - **Phase:** 5 (End-to-end integration) — see [`plan/phase-5.md`](../../plan/phase-5.md)
 - **Scope:** Records the §1 (orchestrator entry point), §2 (configuration surface and
-  precedence), and §3 (progress reporting and stdout/stderr split) decisions. Later sections
-  are recorded here as they land.
+  precedence), §3 (progress reporting and stdout/stderr split), and §4 (error handling, exit
+  codes, and recoverability) decisions. Later sections are recorded here as they land.
 
 ## Context
 
@@ -97,6 +97,37 @@ process.stderr]`), so the renderer cannot pollute stdout.
 
 **Rationale.** Callers (and the skill) can parse stdout deterministically while a human reads
 the live progress on stderr.
+
+## Decision 4 — Error handling, exit codes, and recoverability (§4)
+
+**Decision.** Every stage failure maps to one actionable stderr message and a stable exit code.
+
+| Condition                           | Exit                 | Message says                                                        |
+| ----------------------------------- | -------------------- | ------------------------------------------------------------------- |
+| Base ambiguous                      | `2`                  | which refs were considered; pass `--base <ref>` (or project config) |
+| Invalid narration config            | `2`                  | which option and the accepted values                                |
+| Plan unreadable / invalid           | `3`                  | the plan path and the validation issues                             |
+| Missing / rejected `OPENAI_API_KEY` | `4`                  | how to obtain and export the key                                    |
+| Render failed (FFmpeg/Chrome)       | renderer's exit code | the failing command + that the plan/clips were kept                 |
+| Other                               | `1`                  | the underlying error, untruncated                                   |
+
+- **Fail fast on credentials.** When narration will run (not `--dry-run`, no resume), the
+  orchestrator checks `OPENAI_API_KEY` _before_ planning. A missing/rejected key stops the run
+  with exit `4` and a setup message — it never falls back to a silent render.
+- **Fail recoverable, not clean.** On a TTS or render failure the run directory is kept
+  (`branch-plan.json`, `plan.json`, already-generated clips, `render-input.json`) and the CLI
+  reports the exact resume command (`npm run explain`) plus `--force` to regenerate. Cached
+  clips make the retry cheap.
+- **Rendered command is surfaced.** `runRender` returns the renderer command it ran so the
+  failure message can name it.
+- **Repository-unchanged assertion.** After any failure the orchestrator re-reads `HEAD` and the
+  current branch and asserts they match the values captured at start; a mismatch is reported
+  loudly with exit `1`. Documentation states the invariant: no stage checks out, resets,
+  stashes, commits, or writes tracked files — all writes stay under `artifacts/` or `--out`.
+
+**Rationale.** Codes are stable and already used by the stage CLIs; recoverability (kept
+artifacts + cached clips) makes failures resumable without re-billing, and the assertion backs
+the read-only guarantee with a runtime check.
 
 ---
 

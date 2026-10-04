@@ -367,6 +367,8 @@ export interface RenderStageResult {
   outPath: string;
   renderInputPath: string;
   collided: boolean;
+  /** The renderer command that was run (for actionable failure messages). */
+  command: string;
   /** Process exit code of the Remotion render (0 on success). */
   exitCode: number;
 }
@@ -459,7 +461,8 @@ export async function runRender(
   );
 
   const runner = options.runner ?? runRemotion;
+  const command = [process.execPath, REMOTION_CLI, ...args].join(" ");
   const exitCode = await runner(args, PLUGIN_ROOT);
 
-  return { outPath, renderInputPath, collided, exitCode };
+  return { outPath, renderInputPath, collided, command, exitCode };
 }

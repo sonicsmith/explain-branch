@@ -11,12 +11,17 @@
  * failed render never re-bills for audio it already has.
  *
  * Read-only with respect to tracked source: the only writes are artifacts under the run
- * directory (and the output MP4).
+ * directory (and the output MP4). Failures never leave the repository changed — no stage
+ * checks out, resets, stashes, commits, or writes tracked files; on failure the run directory
+ * is kept so the command can be re-run to resume, and HEAD/branch are asserted unchanged.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BaseResolutionError } from "../analysis/buildChangeInventory.ts";
-import { resolveRepositoryRoot } from "../git/inspectBranch.ts";
+import {
+  getBranchState,
+  resolveRepositoryRoot,
+} from "../git/inspectBranch.ts";
 import {
   NarrationConfigError,
   resolveNarrationConfig,
@@ -25,6 +30,7 @@ import {
 import {
   CredentialRejectedError,
   MissingCredentialError,
+  readOpenAiApiKey,
 } from "../narration/credentials.ts";
 import type { NarrationProgressEvent } from "../narration/narratePlan.ts";
 import { validateNarratedPlan } from "../narration/validateNarration.ts";
@@ -53,6 +59,16 @@ interface CliOptions {
   stdout: boolean;
   overrides: NarrationConfigOverrides;
   help: boolean;
+}
+
+/** Facts captured after inspection so a failure can assert and report cleanly. */
+interface RunContext {
+  repositoryRoot: string;
+  runDir: string;
+  head: string | null;
+  branch: string | null;
+  /** True once a plan has been written, i.e. a re-run can resume from cached artifacts. */
+  planned: boolean;
 }
 
 const HELP = `explain-branch — turn the current branch into a narrated explainer video (end to end)
@@ -90,7 +106,8 @@ Defaults can be set per repository in .explain-branch.json or package.json
 CLI flag > .explain-branch.json > package.json > EXPLAIN_BRANCH_TTS_* env > built-in.
 
 Exit codes: 0 success, 2 base/config could not be resolved, 3 plan failed validation,
-4 missing/rejected credentials, 1 other error.
+4 missing/rejected credentials, the renderer's exit code on render failure, 1 other error.
+On failure the kept run directory and a resume command are reported.
 
 Narration text is derived from repository content and is sent to the configured provider.`;
 
@@ -227,6 +244,28 @@ async function tryResumeNarratedPlan(
   return validation.valid ? plan : null;
 }
 
+/**
+ * Asserts the invariant that no stage switched branches or committed: HEAD and the current
+ * branch must be unchanged from before the run. Read-only and best-effort — if the repository
+ * can no longer be read, the original failure stands.
+ */
+async function verifyRepositoryUnchanged(context: RunContext): Promise<void> {
+  try {
+    const after = await getBranchState(context.repositoryRoot);
+    if (
+      after.headCommit !== context.head ||
+      after.currentBranch !== context.branch
+    ) {
+      console.error(
+        `error: the repository state changed during the run (HEAD ${context.head ?? "(none)"} -> ${after.headCommit ?? "(none)"}, branch ${context.branch ?? "(detached)"} -> ${after.currentBranch ?? "(detached)"}). No stage should switch branches or commit; inspect the repository manually.`,
+      );
+      process.exitCode = 1;
+    }
+  } catch {
+    // The repository could not be re-read; keep the original failure as the outcome.
+  }
+}
+
 function reportError(error: unknown): void {
   if (
     error instanceof MissingCredentialError ||
@@ -278,6 +317,8 @@ async function main(): Promise<void> {
 
   const log = (message: string): void => console.error(message);
 
+  let context: RunContext | null = null;
+
   try {
     const repositoryRoot = await resolveRepositoryRoot(
       options.repoPath ?? process.cwd(),
@@ -304,6 +345,14 @@ async function main(): Promise<void> {
     });
     const relativeAudioDir = path.posix.join(relativeRunDir, "audio");
     const planPath = path.join(runDir, "plan.json");
+
+    context = {
+      repositoryRoot,
+      runDir,
+      head: inventory.headCommit,
+      branch: inventory.currentBranch,
+      planned: false,
+    };
 
     // Disclosure before any long work (plan §11): state exactly what will be analysed.
     log(`Branch:       ${inventory.currentBranch ?? "(detached HEAD)"}`);
@@ -366,11 +415,17 @@ async function main(): Promise<void> {
     }
 
     if (narratedPlan === null) {
+      // Fail fast (exit 4) with a setup message before any planning or narration work: a
+      // narrated video cannot be produced without credentials, and we never fall back to a
+      // silent render.
+      if (!options.dryRun) readOpenAiApiKey();
+
       log("[2/5] Building a scene plan...");
       const { plan } = await runPlan({
         inventory,
         ...(maxScenes !== undefined ? { maxScenes } : {}),
       });
+      context.planned = true;
 
       // Checkpoint the pre-narration plan so a failed narration can resume without re-planning.
       // A dry run writes nothing at all.
@@ -427,7 +482,9 @@ async function main(): Promise<void> {
         repositoryRoot,
       });
       if (!validation.valid) {
-        console.error("error: the narrated plan failed validation:");
+        console.error(
+          `error: the narrated plan at ${planPath} failed validation:`,
+        );
         for (const issue of validation.planErrors) {
           console.error(`  - ${issue.path}: ${issue.message}`);
         }
@@ -453,9 +510,11 @@ async function main(): Promise<void> {
 
     if (render.exitCode !== 0) {
       process.exitCode = render.exitCode;
+      log(`Render command failed: ${render.command}`);
       log(
-        `Render failed (exit ${render.exitCode}). The plan and audio clips were kept under ${runDir}; re-run to resume without regenerating cached audio.`,
+        `Render failed (exit ${render.exitCode}). The plan and audio clips were kept under ${runDir}; re-run "npm run explain" to resume without regenerating cached audio.`,
       );
+      if (context !== null) await verifyRepositoryUnchanged(context);
       return;
     }
 
@@ -465,6 +524,14 @@ async function main(): Promise<void> {
     process.stdout.write(`${render.outPath}\n`);
   } catch (error) {
     reportError(error);
+    if (context !== null) {
+      await verifyRepositoryUnchanged(context);
+      if (context.planned) {
+        console.error(
+          `The run directory ${context.runDir} was kept; re-run "npm run explain" to resume without regenerating cached audio (add --force to regenerate).`,
+        );
+      }
+    }
   }
 }
 

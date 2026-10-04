@@ -108,7 +108,7 @@ directory contract.
 
 ## 4. Error handling, exit codes, and recoverability
 
-- [ ] Map every stage failure to a single, actionable message and a stable exit code, reusing
+- [x] Map every stage failure to a single, actionable message and a stable exit code, reusing
       the codes already established:
 
       | Condition | Exit | Message must say |
@@ -120,13 +120,13 @@ directory contract.
       | Render failed (FFmpeg/Chrome) | stage code / `1` | the failing command + that clips/plan were kept |
       | Other | `1` | the underlying error, untruncated |
 
-- [ ] **Fail recoverable, not clean** (§15): on TTS or render failure, keep the run directory
+- [x] **Fail recoverable, not clean** (§15): on TTS or render failure, keep the run directory
       (plan + already-generated clips + `render-input.json`) and tell the user the exact
       command to resume — e.g. re-run and it will skip cached audio.
-- [ ] Never leave the repository changed on failure: assert (and document) that no stage
+- [x] Never leave the repository changed on failure: assert (and document) that no stage
       checks out, resets, stashes, commits, or writes to tracked files; all writes stay under
       `artifacts/` or `--out`.
-- [ ] When credentials are missing, **stop before** planning/narrating and state that a
+- [x] When credentials are missing, **stop before** planning/narrating and state that a
       narrated video cannot be produced — never fall back to a silent render silently.
 
 **Decision to record:** the full exit-code table and the resume contract.
