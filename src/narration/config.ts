@@ -121,10 +121,13 @@ export function resolveNarrationConfigFromLayers(
 
   const resolved = Object.fromEntries(
     FIELDS.map((field) => [field, resolveField(ordered, field)]),
-  ) as Record<keyof NarrationConfigOverrides, {
-    value: string | undefined;
-    source: NarrationConfigSource;
-  }>;
+  ) as Record<
+    keyof NarrationConfigOverrides,
+    {
+      value: string | undefined;
+      source: NarrationConfigSource;
+    }
+  >;
 
   const providerValue =
     resolved.provider.value ?? DEFAULT_NARRATION_CONFIG.provider;
@@ -142,8 +145,8 @@ export function resolveNarrationConfigFromLayers(
   const instructionsValue = resolved.instructions.value;
   const dropDefaultInstructions =
     instructionsSource === "default" &&
-    !modelSupportsInstructions(model)
-      : instructionsSource === "default" && model === "tts-1-hd";
+    instructionsValue !== undefined &&
+    !modelSupportsInstructions(model);
 
   const config: NarrationConfig = {
     provider: providerValue as NarrationProvider,
@@ -166,12 +169,11 @@ export function resolveNarrationConfigFromLayers(
   return {
     config,
     sources: {
-      provider: resolved.provider.value
-        ? resolved.provider.source
-        : "default",
+      provider: resolved.provider.value ? resolved.provider.source : "default",
       model: resolved.model.value ? resolved.model.source : "default",
       voice: resolved.voice.value ? resolved.voice.source : "default",
-      instructions: config.instructions === undefined ? "default" : instructionsSource,
+      instructions:
+        config.instructions === undefined ? "default" : instructionsSource,
       format: resolved.format.value ? resolved.format.source : "default",
     },
   };
@@ -226,8 +228,8 @@ export async function readProjectNarrationConfig(
   );
   if (typeof packageJson === "object" && packageJson !== null) {
     const pkg = extractOverrides(
-      (packageJson as { explainBranch?: { narration?: unknown } })
-        .explainBranch?.narration,
+      (packageJson as { explainBranch?: { narration?: unknown } }).explainBranch
+        ?.narration,
     );
     if (pkg !== undefined) result.package = pkg;
   }

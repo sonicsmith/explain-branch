@@ -23,14 +23,14 @@ test("falls back to built-in defaults", () => {
 
 test("precedence is cli > config > package > environment > default", () => {
   const { config, sources } = resolveNarrationConfigFromLayers({
-    cli: { voice: "cedar" },
+    cli: { voice: "coral" },
     config: { voice: "alloy", model: "tts-1" },
     package: { voice: "echo", model: "tts-1-hd", format: "mp3" },
     env: { [`${NARRATION_ENV_PREFIX}VOICE`]: "nova" },
   });
 
   // voice comes from the CLI layer
-  assert.equal(config.voice, "cedar");
+  assert.equal(config.voice, "coral");
   assert.equal(sources.voice, "cli");
   // model comes from the .explain-branch.json layer
   assert.equal(config.model, "tts-1");

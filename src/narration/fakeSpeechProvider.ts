@@ -18,8 +18,13 @@ export function defaultFakeDurationMs(request: SpeechSynthesisRequest): number {
 
 export class FakeSpeechProvider implements SpeechProvider {
   readonly requests: SpeechSynthesisRequest[] = [];
+  private readonly options: FakeSpeechProviderOptions;
 
-  constructor(private readonly options: FakeSpeechProviderOptions = {}) {}
+  // Note: an explicit field (not a constructor parameter property) because Node's strip-only
+  // TypeScript mode cannot run parameter properties.
+  constructor(options: FakeSpeechProviderOptions = {}) {
+    this.options = options;
+  }
 
   async synthesize(request: SpeechSynthesisRequest): Promise<Uint8Array> {
     this.requests.push(request);

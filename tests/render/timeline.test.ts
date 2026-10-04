@@ -163,6 +163,7 @@ test("assertTimelineConsistent flags a mismatched durationInFrames", () => {
         startMs: 0,
         durationMs: 1000,
         narrationMs: 1000,
+        narrationStartFrame: 0,
         narrated: true,
       },
     ],
