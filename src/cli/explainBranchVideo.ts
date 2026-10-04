@@ -44,6 +44,12 @@ import {
   writeRunReport,
 } from "../pipeline/report.ts";
 import {
+  createPlaceholderRenderRunner,
+  createPlaceholderSpeechProvider,
+  fakeTtsEnabled,
+  skipRenderEnabled,
+} from "../pipeline/testHooks.ts";
+import {
   PlanValidationError,
   resolveRunDir,
   runInspect,
@@ -327,6 +333,10 @@ async function main(): Promise<void> {
 
   const log = (message: string): void => console.error(message);
 
+  // Offline test seams (inert unless EXPLAIN_BRANCH_TEST_* is set) — see testHooks.ts.
+  const useFakeTts = fakeTtsEnabled();
+  const skipRender = skipRenderEnabled();
+
   let context: RunContext | null = null;
 
   try {
@@ -428,8 +438,8 @@ async function main(): Promise<void> {
     if (narratedPlan === null) {
       // Fail fast (exit 4) with a setup message before any planning or narration work: a
       // narrated video cannot be produced without credentials, and we never fall back to a
-      // silent render.
-      if (!options.dryRun) readOpenAiApiKey();
+      // silent render. The offline test seam substitutes a provider instead.
+      if (!options.dryRun && !useFakeTts) readOpenAiApiKey();
 
       log("[2/5] Building a scene plan...");
       const { plan } = await runPlan({
@@ -456,6 +466,9 @@ async function main(): Promise<void> {
         runDir,
         relativeAudioDir,
         config,
+        ...(useFakeTts
+          ? { createProvider: () => createPlaceholderSpeechProvider() }
+          : {}),
         ...(options.force ? { force: true } : {}),
         ...(options.dryRun ? { dryRun: true } : {}),
         planPath,
@@ -520,6 +533,7 @@ async function main(): Promise<void> {
       runDir,
       ...(options.outPath !== undefined ? { outPath: options.outPath } : {}),
       overwrite: options.overwrite,
+      ...(skipRender ? { runner: createPlaceholderRenderRunner() } : {}),
       log,
     });
 

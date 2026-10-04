@@ -5,8 +5,8 @@
 - **Phase:** 5 (End-to-end integration) — see [`plan/phase-5.md`](../../plan/phase-5.md)
 - **Scope:** Records the §1 (orchestrator entry point), §2 (configuration surface and
   precedence), §3 (progress reporting and stdout/stderr split), §4 (error handling, exit codes,
-  and recoverability), §5 (output management and the run report), and §6 (skill and plugin
-  wiring) decisions. Later sections are recorded here as they land.
+  and recoverability), §5 (output management and the run report), §6 (skill and plugin wiring),
+  and §7 (offline testing) decisions. Later sections are recorded here as they land.
 
 ## Context
 
@@ -182,6 +182,40 @@ false-success when the renderer writes nothing.
 
 **Rationale.** A single documented command and a filename/argv contract make the skill a thin,
 verifiable wrapper; keeping schemas and flags next to the skill prevents documentation drift.
+
+## Decision 7 — Testing the orchestrator offline (§7)
+
+**Decision.** The orchestrator is tested end to end without the network or Chrome, via a small
+env-gated seam (`src/pipeline/testHooks.ts`):
+
+- `EXPLAIN_BRANCH_TEST_FAKE_TTS=1` — substitute the offline `FakeSpeechProvider` (also bypasses
+  the credential pre-flight, since no API call is made);
+- `EXPLAIN_BRANCH_TEST_SKIP_RENDER=1` — substitute a placeholder renderer that writes a fake MP4
+  and exits 0;
+- `EXPLAIN_BRANCH_TEST_RENDER_FAIL=1` — make that placeholder exit non-zero, to exercise the
+  render-failure/resume path.
+
+The seam is inert unless the variables are set, so production runs are unaffected.
+
+`tests/pipeline/orchestrator.test.ts` spawns the real CLI against `TempRepo` fixtures and
+covers:
+
+- **happy path** — exit 0; stdout is the run report; `plan.json`, `narration.txt`,
+  `render-input.json`, `report.json`, the clips, and the MP4 all exist; no tracked file changed;
+- **failure paths** — ambiguous base (exit 2 + `--base` guidance), missing credentials (exit 4),
+  unreadable plan (exit 3; narrate CLI), output collision (timestamped path + notice, original
+  untouched);
+- **resumability** — a render failure keeps the plan + clips and prints a resume command; a
+  second run reuses the plan (`Narration already generated — skipping`) and does not regenerate
+  audio (clip mtime unchanged).
+
+The real-API/Chrome path stays a documented manual smoke test (`docs/manual-smoke-test.md`),
+now driven through `npm run explain` rather than the individual stage CLIs. Tests require no
+network.
+
+**Rationale.** Spawning the real CLI with a fake provider and renderer exercises the exact
+orchestration flow (run directory, resume, report, exit codes) while staying deterministic and
+offline; a documented manual smoke test remains the final proof against the real services.
 
 ---
 

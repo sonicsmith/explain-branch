@@ -167,18 +167,18 @@ directory contract.
 
 ## 7. Testing and smoke test
 
-- [ ] Add an **offline end-to-end test** for the orchestrator using the fake TTS provider and a
+- [x] Add an **offline end-to-end test** for the orchestrator using the fake TTS provider and a
       temp-repo fixture: inspect → plan → narrate → render-input → (render skipped or a
       minimal composition), asserting the report, artifact layout, exit code, and that no
       tracked file changed.
-- [ ] Test each mapped failure path returns the documented exit code and message: ambiguous
+- [x] Test each mapped failure path returns the documented exit code and message: ambiguous
       base, missing key, invalid plan, output collision.
-- [ ] Test resumability: a run whose render "fails" keeps the plan + clips, and a second run
+- [x] Test resumability: a run whose render "fails" keeps the plan + clips, and a second run
       reuses them without regenerating audio.
-- [ ] Keep the existing **manual** real-API smoke test in `docs/manual-smoke-test.md` as the
+- [x] Keep the existing **manual** real-API smoke test in `docs/manual-smoke-test.md` as the
       final end-to-end proof (requires `OPENAI_API_KEY` + network, excluded from `npm test`);
       extend it to drive the orchestrator, not the individual CLIs.
-- [ ] Ensure `npm test` and `npm run typecheck` stay green and that new tests need no network.
+- [x] Ensure `npm test` and `npm run typecheck` stay green and that new tests need no network.
 
 **Decision to record:** how the orchestrator is tested offline and what the smoke test covers.
 
