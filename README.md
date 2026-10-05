@@ -205,9 +205,11 @@ The Remotion composition (`src/render/index.ts`, id `ExplainBranch`) receives a 
 serializable `{ plan, sources, options }` input, so the video shows real captured code and
 never touches the repository while rendering. Code scenes are syntax-highlighted with Shiki
 (fine-grained bundle, JavaScript engine — no wasm fetch). A scene with `steps` advances through
-the change a few lines at a time: the highlighted range moves and the view scrolls to each step
-as its narration plays. There are no on-screen captions: the narration alone carries the
-explanation, so the code keeps the full frame. Deletions render as
+the change a few lines at a time: the discussed code stays vertically centred, an arrow in the
+gutter marks the line being explained, the frame punches in slightly for a short highlight, and
+the code slides between steps as the narration plays. Scenes ease in and out with a restrained
+fade/slide/scale so pages transition rather than cut. There are no on-screen captions: the
+narration alone carries the explanation, so the code keeps the full frame. Deletions render as
 diff summaries; the closing scene summarises the branch, its omissions, and caveats.
 
 ## Narrate a video

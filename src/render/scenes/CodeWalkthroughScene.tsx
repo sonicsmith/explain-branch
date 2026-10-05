@@ -37,6 +37,7 @@ export function CodeWalkthroughScene({
   let focusLine: number;
   let transitionFromFrame = 0;
   let stepKey = "static";
+  let previousFocusLine: number | undefined;
 
   if (active !== null) {
     location =
@@ -46,11 +47,19 @@ export function CodeWalkthroughScene({
           sources[candidate.file] !== undefined,
       ) ?? fallbackLocation;
     highlights = [{ startLine: active.startLine, endLine: active.endLine }];
-    focusLine = active.startLine;
+    // Sit the viewport on the middle of the discussed range.
+    focusLine = Math.floor((active.startLine + active.endLine) / 2);
     // Step 0 is on screen from the start of the scene (the visual lead-in happens before its
     // narration window); later steps replay the scroll/highlight transition at their boundary.
     transitionFromFrame = active.stepIndex === 0 ? 0 : active.fromFrame;
     stepKey = `step-${active.stepIndex}`;
+
+    const previous =
+      active.stepIndex > 0 ? stepWindows[active.stepIndex - 1] : undefined;
+    previousFocusLine =
+      previous === undefined
+        ? undefined
+        : Math.floor((previous.startLine + previous.endLine) / 2);
   } else {
     location = fallbackLocation;
     highlights = scene.highlights.map((highlight) => ({
@@ -82,6 +91,7 @@ export function CodeWalkthroughScene({
       highlights={highlights}
       focusLine={focusLine}
       startFrame={transitionFromFrame}
+      {...(previousFocusLine !== undefined ? { previousFocusLine } : {})}
     />
   );
 }

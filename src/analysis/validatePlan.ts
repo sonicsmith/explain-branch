@@ -256,7 +256,13 @@ function validateScene(
           add(`${stepPath}.file`, stepPathError);
           return;
         }
-        if (!isLineRange(raw.startLine, raw.endLine)) {
+        const stepStart = raw.startLine;
+        const stepEnd = raw.endLine;
+        if (
+          !isPositiveInteger(stepStart) ||
+          !isPositiveInteger(stepEnd) ||
+          stepEnd < stepStart
+        ) {
           add(
             stepPath,
             "startLine/endLine must be positive integers with endLine >= startLine",
@@ -273,10 +279,7 @@ function validateScene(
           );
           return;
         }
-        if (
-          raw.startLine < location.startLine ||
-          raw.endLine > location.endLine
-        ) {
+        if (stepStart < location.startLine || stepEnd > location.endLine) {
           add(
             stepPath,
             `step range must fall within the sourceLocation for "${raw.file}"`,

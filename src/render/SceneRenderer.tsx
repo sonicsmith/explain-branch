@@ -62,6 +62,9 @@ export function SceneRenderer(props: SceneRendererProps) {
         index={index}
         total={total}
         sceneStartFrame={sceneStartFrame}
+        durationInFrames={
+          timeline?.durationInFrames ?? Math.max(1, Math.round(fps * 8))
+        }
         captions={captions}
         showCaption={showCaptions}
       >

@@ -24,6 +24,11 @@ export interface CodeFrameProps {
    * highlight animations replay from that point instead of being already complete.
    */
   startFrame?: number;
+  /**
+   * The focus line of the previous step. Used to slide the code from the old window to the
+   * new one, so a stepped scene reads as a scroll rather than a cut.
+   */
+  previousFocusLine?: number;
 }
 
 export function splitLines(content: string): string[] {
@@ -45,6 +50,7 @@ export function CodeFrame({
   maxVisibleLines = layout.maxVisibleLines,
   delayFrames = 6,
   startFrame = 0,
+  previousFocusLine,
 }: CodeFrameProps) {
   const frame = useCurrentFrame();
   const localFrame = frame - startFrame;
@@ -52,43 +58,79 @@ export function CodeFrame({
   const tokens = useHighlightedLines(content, language);
 
   const totalLines = Math.max(1, allLines.length);
-  const maxVisible = Math.max(4, maxVisibleLines);
-  const maxStart = Math.max(1, totalLines - maxVisible + 1);
+  const visible = Math.max(4, maxVisibleLines);
+  const shortFile = totalLines <= visible;
 
-  const target = Math.min(
-    Math.max(focusLine - Math.floor(maxVisible / 3), 1),
-    maxStart,
-  );
-  const lead = Math.min(4, target - 1);
-  const startLineNumber = Math.max(1, target - lead);
+  // The window is chosen so the discussed line is vertically centred in the frame.
+  const windowStart = (line: number): number => {
+    if (shortFile) return 1;
+    const raw = line - Math.floor(visible / 2);
+    return Math.min(Math.max(raw, 1), totalLines - visible + 1);
+  };
+  const startLineNumber = windowStart(focusLine);
+  const previousStart = windowStart(previousFocusLine ?? focusLine);
+  const renderCount = shortFile ? totalLines : visible;
 
-  const scrollProgress = interpolate(
-    localFrame - delayFrames,
-    [0, 22],
+  const enter = interpolate(localFrame, [0, 20], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.out(Easing.cubic),
+  });
+  // Slide from the previous step's window so a stepped scene reads as a scroll, not a jump.
+  const translateY = interpolate(
+    enter,
     [0, 1],
+    [(previousStart - startLineNumber) * layout.lineHeight, 0],
+  );
+
+  // A restrained punch-in: zoom slightly closer for a short highlight, sit back for a long one.
+  const highlightLines = highlights.reduce(
+    (total, range) => total + Math.max(1, range.endLine - range.startLine + 1),
+    0,
+  );
+  const targetScale = Math.min(
+    1.07,
+    Math.max(1, 1.07 - Math.max(0, highlightLines - 1) * 0.006),
+  );
+  const scale = interpolate(
+    localFrame,
+    [0, 24],
+    [targetScale - 0.025, targetScale],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
       easing: Easing.out(Easing.cubic),
     },
   );
-  const translateY = -lead * layout.lineHeight * scrollProgress;
 
-  const highlightOpacity = interpolate(
+  const frameOpacity = interpolate(localFrame, [0, 10], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const bandOpacity = interpolate(localFrame - delayFrames, [8, 22], [0, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const pointerOpacity = interpolate(
     localFrame - delayFrames,
-    [16, 34],
+    [14, 28],
     [0, 1],
     {
       extrapolateLeft: "clamp",
       extrapolateRight: "clamp",
     },
   );
-  const frameOpacity = interpolate(localFrame, [0, 10], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
+  const pointerNudge = interpolate(
+    localFrame - delayFrames,
+    [14, 30],
+    [-10, 0],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    },
+  );
 
-  const renderCount = maxVisible + lead + 1;
   const rows: {
     lineNumber: number;
     plain: string;
@@ -109,149 +151,183 @@ export function CodeFrame({
   const highlightedLineNumbers = new Set<number>();
   for (const range of highlights) {
     for (let line = range.startLine; line <= range.endLine; line += 1) {
-      if (line >= startLineNumber && line < startLineNumber + renderCount) {
-        highlightedLineNumbers.add(line);
-      }
+      highlightedLineNumbers.add(line);
     }
   }
+
+  // A small arrow in the gutter marks the line (or middle of the range) being discussed.
+  const pointerTop =
+    (focusLine - startLineNumber) * layout.lineHeight + layout.lineHeight / 2;
 
   return (
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
         height: "100%",
-        borderRadius: 16,
-        overflow: "hidden",
-        backgroundColor: theme.backgroundElevated,
-        border: `1px solid ${theme.border}`,
+        transform: `scale(${scale})`,
+        transformOrigin: "center center",
         opacity: frameOpacity,
       }}
     >
       <div
         style={{
           display: "flex",
-          alignItems: "center",
-          gap: 14,
-          height: 62,
-          padding: "0 26px",
-          backgroundColor: theme.backgroundRaised,
-          borderBottom: `1px solid ${theme.border}`,
+          flexDirection: "column",
+          height: "100%",
+          borderRadius: 16,
+          overflow: "hidden",
+          backgroundColor: theme.backgroundElevated,
+          border: `1px solid ${theme.border}`,
         }}
       >
-        <span
-          style={{
-            width: 13,
-            height: 13,
-            borderRadius: 999,
-            backgroundColor: "#ff5f57",
-          }}
-        />
-        <span
-          style={{
-            width: 13,
-            height: 13,
-            borderRadius: 999,
-            backgroundColor: "#febc2e",
-          }}
-        />
-        <span
-          style={{
-            width: 13,
-            height: 13,
-            borderRadius: 999,
-            backgroundColor: "#28c840",
-          }}
-        />
-        <span style={{ marginLeft: 14, fontSize: 25, color: theme.text }}>
-          {file}
-        </span>
-        <span
-          style={{
-            marginLeft: "auto",
-            fontSize: 20,
-            color: theme.textMuted,
-            textTransform: "uppercase",
-            letterSpacing: 1.5,
-          }}
-        >
-          {language}
-        </span>
-      </div>
-
-      <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
         <div
           style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 20,
-            transform: `translateY(${translateY}px)`,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            height: 62,
+            padding: "0 26px",
+            backgroundColor: theme.backgroundRaised,
+            borderBottom: `1px solid ${theme.border}`,
           }}
         >
-          {rows.map((row) => (
-            <div
-              key={`band-${row.lineNumber}`}
-              style={{
-                position: "absolute",
-                left: 14,
-                right: 26,
-                top: (row.lineNumber - startLineNumber) * layout.lineHeight,
-                height: layout.lineHeight,
-                borderRadius: 6,
-                backgroundColor: highlightedLineNumbers.has(row.lineNumber)
-                  ? theme.highlight
-                  : "transparent",
-                borderLeft: highlightedLineNumbers.has(row.lineNumber)
-                  ? `4px solid ${theme.highlightBorder}`
-                  : "4px solid transparent",
-                opacity: highlightOpacity,
-              }}
-            />
-          ))}
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: 999,
+              backgroundColor: "#ff5f57",
+            }}
+          />
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: 999,
+              backgroundColor: "#febc2e",
+            }}
+          />
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: 999,
+              backgroundColor: "#28c840",
+            }}
+          />
+          <span style={{ marginLeft: 14, fontSize: 25, color: theme.text }}>
+            {file}
+          </span>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: 20,
+              color: theme.textMuted,
+              textTransform: "uppercase",
+              letterSpacing: 1.5,
+            }}
+          >
+            {language}
+          </span>
+        </div>
 
-          <div style={{ position: "relative" }}>
+        <div
+          style={{
+            position: "relative",
+            flex: 1,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              transform: `translateY(${translateY}px)`,
+            }}
+          >
+            {pointerTop >= 0 &&
+            pointerTop <= renderCount * layout.lineHeight ? (
+              <div
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  top: pointerTop - 9,
+                  width: 0,
+                  height: 0,
+                  borderTop: "9px solid transparent",
+                  borderBottom: "9px solid transparent",
+                  borderLeft: `13px solid ${theme.accent}`,
+                  opacity: pointerOpacity,
+                  transform: `translateX(${pointerNudge}px)`,
+                }}
+              />
+            ) : null}
+
             {rows.map((row) => (
               <div
-                key={`row-${row.lineNumber}`}
+                key={`band-${row.lineNumber}`}
                 style={{
-                  display: "flex",
-                  alignItems: "baseline",
+                  position: "absolute",
+                  left: 14,
+                  right: 26,
+                  top: (row.lineNumber - startLineNumber) * layout.lineHeight,
                   height: layout.lineHeight,
-                  fontFamily: theme.codeFont,
-                  fontSize: layout.fontSize,
-                  lineHeight: `${layout.lineHeight}px`,
+                  borderRadius: 6,
+                  backgroundColor: highlightedLineNumbers.has(row.lineNumber)
+                    ? theme.highlight
+                    : "transparent",
+                  borderLeft: highlightedLineNumbers.has(row.lineNumber)
+                    ? `4px solid ${theme.highlightBorder}`
+                    : "4px solid transparent",
+                  opacity: bandOpacity,
                 }}
-              >
-                <span
+              />
+            ))}
+
+            <div style={{ position: "relative" }}>
+              {rows.map((row) => (
+                <div
+                  key={`row-${row.lineNumber}`}
                   style={{
-                    width: layout.gutterWidth,
-                    textAlign: "right",
-                    paddingRight: 24,
-                    color: theme.textFaint,
-                    flexShrink: 0,
+                    display: "flex",
+                    alignItems: "baseline",
+                    height: layout.lineHeight,
+                    fontFamily: theme.codeFont,
+                    fontSize: layout.fontSize,
+                    lineHeight: `${layout.lineHeight}px`,
                   }}
                 >
-                  {row.lineNumber}
-                </span>
-                <span style={{ whiteSpace: "pre" }}>
-                  {row.lineTokens === undefined ? (
-                    <span style={{ color: theme.text }}>
-                      {row.plain === "" ? " " : row.plain}
-                    </span>
-                  ) : (
-                    row.lineTokens.map((token, tokenIndex) => (
-                      <span
-                        key={tokenIndex}
-                        style={{ color: token.color ?? theme.text }}
-                      >
-                        {token.content}
+                  <span
+                    style={{
+                      width: layout.gutterWidth,
+                      textAlign: "right",
+                      paddingRight: 24,
+                      color: theme.textFaint,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {row.lineNumber}
+                  </span>
+                  <span style={{ whiteSpace: "pre" }}>
+                    {row.lineTokens === undefined ? (
+                      <span style={{ color: theme.text }}>
+                        {row.plain === "" ? " " : row.plain}
                       </span>
-                    ))
-                  )}
-                </span>
-              </div>
-            ))}
+                    ) : (
+                      row.lineTokens.map((token, tokenIndex) => (
+                        <span
+                          key={tokenIndex}
+                          style={{ color: token.color ?? theme.text }}
+                        >
+                          {token.content}
+                        </span>
+                      ))
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
