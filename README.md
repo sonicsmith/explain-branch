@@ -206,7 +206,8 @@ serializable `{ plan, sources, options }` input, so the video shows real capture
 never touches the repository while rendering. Code scenes are syntax-highlighted with Shiki
 (fine-grained bundle, JavaScript engine — no wasm fetch). A scene with `steps` advances through
 the change a few lines at a time: the highlighted range moves and the view scrolls to each step
-as its narration plays, and the caption for each step matches its highlight. Deletions render as
+as its narration plays. There are no on-screen captions: the narration alone carries the
+explanation, so the code keeps the full frame. Deletions render as
 diff summaries; the closing scene summarises the branch, its omissions, and caveats.
 
 ## Narrate a video

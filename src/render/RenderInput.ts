@@ -12,6 +12,10 @@ export interface RenderOptions {
   fps?: number;
   width?: number;
   height?: number;
+  /**
+   * Whether to burn caption text at the bottom of each scene. Off by default: the narration
+   * carries the explanation, so the video keeps the full frame for the code.
+   */
   showCaptions?: boolean;
   /** Visual lead-in before narration starts, in ms. */
   leadInMs?: number;
@@ -49,7 +53,7 @@ export const DEFAULT_RENDER_OPTIONS = {
   fps: 30,
   width: 1920,
   height: 1080,
-  showCaptions: true,
+  showCaptions: false,
   ...DEFAULT_TIMELINE_OPTIONS,
 } as const;
 

@@ -52,8 +52,9 @@ interface ExplainerScene {
 
 A `code-walkthrough` scene with `steps` plays them in order: the highlighted range advances as
 the narration plays, a few lines at a time. The renderer divides the scene's single audio clip
-across the steps in proportion to each step's narration length, and the captions follow the
-same windows, so highlight and caption always agree.
+across the steps in proportion to each step's narration length, so the highlight moves in time
+with the voice. Captions are off by default (the narration carries the explanation); when
+enabled, they reuse the same windows so highlight and caption always agree.
 
 **Authoring a step.** Read the code at the range (and enough context to understand it), then
 write one to three sentences explaining what those lines do. Assume the viewer may not know the

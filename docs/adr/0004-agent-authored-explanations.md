@@ -51,7 +51,8 @@ SceneStep[]`, where each `SceneStep` is `{ narration, file, startLine, endLine }
   the active step's range and scrolls to it; the highlight/scroll transition replays at each
   step boundary.
 - One audio clip per scene is kept (Phase 4 invariant). `chunkTiming.ts` divides the scene's
-  narration across its steps in proportion to each step's narration length; captions use the
+  narration across its steps in proportion to each step's narration length. Captions are
+  **off by default** — the narration carries the explanation — but when enabled they reuse the
   same windows, so caption and highlight always agree.
 
 **3. Scaffold vs. authored plan are validated differently.**

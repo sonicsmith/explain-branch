@@ -62,7 +62,6 @@ export const sampleInput: RenderInput = {
     fps: 30,
     width: 1920,
     height: 1080,
-    showCaptions: true,
   },
   sources: {
     "src/git/git.ts": gitTs,

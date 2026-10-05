@@ -42,7 +42,7 @@ callers to understand what the code does. Then write `artifacts/branch-explain/p
 - ordered **`steps`** per scene: each step highlights a **few lines** and carries the narration
   that explains those lines,
 - `narrationText` set to the scene's step narrations joined with a space (this is what is
-  spoken; captions and highlights follow the steps).
+  spoken; the highlights follow the steps).
 
 **How to write the narration**
 

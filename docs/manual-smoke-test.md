@@ -52,7 +52,7 @@ npm run browser:ensure            # one-time Chrome Headless Shell download
 6. Review the output MP4 (`artifacts/branch-explainer.mp4` by default):
    - [ ] The narration explains what the code **does** (not file counts or line restatement).
    - [ ] For a stepped scene, the highlighted lines advance a few lines at a time as it plays.
-   - [ ] Each caption matches the step being highlighted.
+   - [ ] There are no on-screen captions; the narration alone carries the explanation.
    - [ ] The voice is audible and matches the on-screen scenes.
    - [ ] No scene cuts narration off; there is a short lead-in and tail.
    - [ ] The total duration matches the run report's `videoDurationMs` within ~one frame.

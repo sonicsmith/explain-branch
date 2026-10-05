@@ -36,7 +36,7 @@ scaffolds, narrates, renders, and validates.
 ## 2. Multi-step scenes
 
 - [x] Schema v3: `ExplainerScene.steps?: SceneStep[]` (`{ narration, file, startLine,
-    endLine }`). → [`../src/planning/types.ts`](../src/planning/types.ts).
+  endLine }`). → [`../src/planning/types.ts`](../src/planning/types.ts).
 - [x] Validate steps: non-empty narration (authored plans), file in the scene's
       sourceLocations, range inside that location, range within the snapshot; add
       `requireNarration`. → [`../src/analysis/validatePlan.ts`](../src/analysis/validatePlan.ts).
@@ -45,7 +45,8 @@ scaffolds, narrates, renders, and validates.
       [`../src/render/scenes/CodeWalkthroughScene.tsx`](../src/render/scenes/CodeWalkthroughScene.tsx),
       [`../src/render/components/CodeFrame.tsx`](../src/render/components/CodeFrame.tsx).
 - [x] One clip per scene, divided across steps proportionally to narration length; captions use
-      the same windows. → [`../src/render/chunkTiming.ts`](../src/render/chunkTiming.ts),
+      the same windows. Captions are off by default (narration only).
+      → [`../src/render/chunkTiming.ts`](../src/render/chunkTiming.ts),
       [`../src/render/captions.ts`](../src/render/captions.ts).
 
 ## 3. Privacy
