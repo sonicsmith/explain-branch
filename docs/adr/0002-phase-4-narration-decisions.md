@@ -1,6 +1,6 @@
 # ADR 0002 — Phase 4: Narration and Synchronization Decisions
 
-- **Status:** In progress (decisions recorded as each Phase 4 task lands)
+- **Status:** Accepted
 - **Date:** 2026-10-04
 - **Phase:** 4 (Narration and synchronization) — see [`plan/phase-4.md`](../../plan/phase-4.md)
 - **Scope:** Records the decisions Phase 4 requires. Phase 0's
@@ -126,9 +126,9 @@ adopt the following defaults and behavior.
 - The retry layer depends on runtime signals (headers/status), so it is designed around a
   fault-injecting fake client rather than hard-coded limits.
 
-**Open items (to be resolved by later Phase 4 tasks).** Exact SDK retry defaults for the
-installed `openai@7.27.0` (the signature is confirmed above; its retry/backoff settings are
-not), and whether to disable them in favour of the app-level policy (§5).
+**Resolved.** The SDK's built-in retries are disabled (`maxRetries: 0` in
+`src/narration/openaiSpeechProvider.ts`) in favour of the app-level retry policy (§5), so the two
+loops cannot multiply requests.
 
 ---
 
