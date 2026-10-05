@@ -371,7 +371,6 @@ This is a logical starting layout, not a claim about required plugin manifest fi
 
 ### Phase 6 — Quality and robustness
 
-- Test a variety of repository sizes and languages.
 - Handle deleted/moved code and stale line references.
 - Improve scene selection and pacing.
 - Test missing credentials, network failures, render failures, and cancellation.
