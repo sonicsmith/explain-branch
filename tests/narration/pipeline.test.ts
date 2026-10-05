@@ -17,7 +17,7 @@ import type { ExplainerPlan } from "../../src/planning/types.ts";
 
 function makePlan(): ExplainerPlan {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     title: "Pipeline",
     repositoryName: "repo",
     branchName: "feature/pipeline",

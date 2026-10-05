@@ -5,6 +5,7 @@ import {
   type ExplainerPlan,
   type ExplainerScene,
   type SceneChange,
+  type SceneStep,
 } from "../planning/types.ts";
 import { relativePathError } from "../planning/paths.ts";
 import type { SourceSnapshot } from "./sourceSnapshot.ts";
@@ -25,6 +26,11 @@ export interface ValidatePlanOptions {
   snapshot: SourceSnapshot;
   /** Require per-scene narration audio metadata (used from Phase 4 onward). */
   requireNarrationAudio?: boolean;
+  /**
+   * Require non-empty narration text. Defaults to `true`; the scaffold produced for the
+   * host agent sets this to `false` because the agent authors the narration afterwards.
+   */
+  requireNarration?: boolean;
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -154,7 +160,10 @@ function validateScene(
   if (!isNonEmptyString(scene.purpose)) {
     add(`${path}.purpose`, "purpose must be a non-empty string");
   }
-  if (!isNonEmptyString(scene.narrationText)) {
+  if (
+    options.requireNarration !== false &&
+    !isNonEmptyString(scene.narrationText)
+  ) {
     add(`${path}.narrationText`, "narrationText must be a non-empty string");
   }
   if (!SCENE_VISUALS.includes(scene.visual)) {
@@ -226,6 +235,55 @@ function validateScene(
         );
       }
     });
+  }
+
+  if (scene.steps !== undefined) {
+    if (!Array.isArray(scene.steps)) {
+      add(`${path}.steps`, "steps must be an array");
+    } else {
+      const requireNarration = options.requireNarration !== false;
+      scene.steps.forEach((step, index) => {
+        const stepPath = `${path}.steps[${index}]`;
+        const raw = (step ?? {}) as Partial<SceneStep>;
+        if (requireNarration && !isNonEmptyString(raw.narration)) {
+          add(
+            `${stepPath}.narration`,
+            "step narration must be a non-empty string",
+          );
+        }
+        const stepPathError = relativePathError(raw.file ?? "");
+        if (stepPathError !== null) {
+          add(`${stepPath}.file`, stepPathError);
+          return;
+        }
+        if (!isLineRange(raw.startLine, raw.endLine)) {
+          add(
+            stepPath,
+            "startLine/endLine must be positive integers with endLine >= startLine",
+          );
+          return;
+        }
+        const location = locations.find(
+          (candidate) => candidate.file === raw.file,
+        );
+        if (location === undefined) {
+          add(
+            `${stepPath}.file`,
+            "step file must be one of the scene's sourceLocations",
+          );
+          return;
+        }
+        if (
+          raw.startLine < location.startLine ||
+          raw.endLine > location.endLine
+        ) {
+          add(
+            stepPath,
+            `step range must fall within the sourceLocation for "${raw.file}"`,
+          );
+        }
+      });
+    }
   }
 
   if (scene.changes !== undefined) {

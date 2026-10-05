@@ -2,6 +2,7 @@ import { Audio, Sequence } from "remotion";
 import type { ExplainerPlan, ExplainerScene } from "../planning/types.ts";
 import { resolveAudioSrc } from "./audioSource.ts";
 import { buildSceneCaptions } from "./captions.ts";
+import { buildStepWindows, type StepWindow } from "./steps.ts";
 import type { SceneTiming } from "./timeline.ts";
 import { SceneChrome } from "./components/SceneChrome.tsx";
 import { ArchitectureScene } from "./scenes/ArchitectureScene.tsx";
@@ -38,6 +39,7 @@ export function SceneRenderer(props: SceneRendererProps) {
   } = props;
 
   const captions = buildSceneCaptions(scene, timeline, fps);
+  const stepWindows = buildStepWindows(scene, timeline, fps);
 
   const audioSrc =
     scene.narrationAudioPath !== undefined
@@ -63,7 +65,7 @@ export function SceneRenderer(props: SceneRendererProps) {
         captions={captions}
         showCaption={showCaptions}
       >
-        {renderSceneContent(scene, plan, sources)}
+        {renderSceneContent(scene, plan, sources, stepWindows)}
       </SceneChrome>
     </>
   );
@@ -73,10 +75,17 @@ function renderSceneContent(
   scene: ExplainerScene,
   plan: ExplainerPlan,
   sources: Record<string, string>,
+  stepWindows: readonly StepWindow[],
 ) {
   switch (scene.visual) {
     case "code-walkthrough":
-      return <CodeWalkthroughScene scene={scene} sources={sources} />;
+      return (
+        <CodeWalkthroughScene
+          scene={scene}
+          sources={sources}
+          stepWindows={stepWindows}
+        />
+      );
     case "diff":
       return <DiffScene scene={scene} />;
     case "architecture":

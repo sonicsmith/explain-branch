@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildChangeInventory } from "../../src/analysis/buildChangeInventory.ts";
 import { validatePlan } from "../../src/analysis/validatePlan.ts";
-import { buildPlan, collectSymbols } from "../../src/planning/buildPlan.ts";
-import { parseUnifiedDiff } from "../../src/git/parseDiff.ts";
+import { buildPlanScaffold } from "../../src/planning/buildPlan.ts";
 import { TempRepo } from "../helpers/tempRepo.ts";
 
 const GENERATED_AT = "2026-01-01T00:00:00.000Z";
@@ -42,7 +41,7 @@ async function makeFixtureRepo(): Promise<TempRepo> {
   return repo;
 }
 
-test("produces a validated, grouped plan with a closing summary", async (t) => {
+test("produces a valid scaffold with a closing summary and no narration", async (t) => {
   const repo = await makeFixtureRepo();
   t.after(() => repo.cleanup());
 
@@ -50,13 +49,17 @@ test("produces a validated, grouped plan with a closing summary", async (t) => {
     repoPath: repo.dir,
     base: "main",
   });
-  const { plan, snapshot } = await buildPlan({
+  const { plan, snapshot } = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
   });
 
-  const validation = validatePlan(plan, { snapshot });
+  // The scaffold is validated without narration: the host agent authors that afterwards.
+  const validation = validatePlan(plan, {
+    snapshot,
+    requireNarration: false,
+  });
   assert.equal(
     validation.valid,
     true,
@@ -67,6 +70,9 @@ test("produces a validated, grouped plan with a closing summary", async (t) => {
   assert.equal(plan.baseRef, "main");
   assert.equal(plan.generatedAt, GENERATED_AT);
   assert.equal(plan.repositoryName, repo.dir.split("/").pop());
+
+  // Narration is never invented by the planner.
+  assert.ok(plan.scenes.every((scene) => scene.narrationText === ""));
 
   const summary = plan.scenes.at(-1);
   assert.equal(summary?.id, "summary");
@@ -84,6 +90,44 @@ test("produces a validated, grouped plan with a closing summary", async (t) => {
   );
 });
 
+test("suggests walkthrough steps inside the scene's source locations", async (t) => {
+  const repo = await makeFixtureRepo();
+  t.after(() => repo.cleanup());
+
+  const inventory = await buildChangeInventory({
+    repoPath: repo.dir,
+    base: "main",
+  });
+  const { plan, snapshot } = await buildPlanScaffold({
+    repositoryRoot: repo.dir,
+    inventory,
+    generatedAt: GENERATED_AT,
+  });
+
+  const stepped = plan.scenes.filter((scene) => (scene.steps?.length ?? 0) > 0);
+  assert.ok(stepped.length > 0, "expected at least one stepped scene");
+
+  for (const scene of stepped) {
+    for (const step of scene.steps ?? []) {
+      assert.equal(step.narration, "");
+      assert.ok(
+        scene.sourceLocations.some(
+          (location) =>
+            location.file === step.file &&
+            location.startLine <= step.startLine &&
+            step.endLine <= location.endLine,
+        ),
+        `step ${step.file}:${step.startLine}-${step.endLine} must sit inside a source location`,
+      );
+    }
+  }
+
+  assert.equal(
+    validatePlan(plan, { snapshot, requireNarration: false }).valid,
+    true,
+  );
+});
+
 test("groups related files into one scene rather than one scene per file", async (t) => {
   const repo = await makeFixtureRepo();
   t.after(() => repo.cleanup());
@@ -92,7 +136,7 @@ test("groups related files into one scene rather than one scene per file", async
     repoPath: repo.dir,
     base: "main",
   });
-  const { plan } = await buildPlan({
+  const { plan } = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
@@ -114,25 +158,6 @@ test("groups related files into one scene rather than one scene per file", async
   );
 });
 
-test("grounds narration in the diff by naming changed symbols", async (t) => {
-  const repo = await makeFixtureRepo();
-  t.after(() => repo.cleanup());
-
-  const inventory = await buildChangeInventory({
-    repoPath: repo.dir,
-    base: "main",
-  });
-  const { plan } = await buildPlan({
-    repositoryRoot: repo.dir,
-    inventory,
-    generatedAt: GENERATED_AT,
-  });
-
-  const narration = plan.scenes.map((scene) => scene.narrationText).join(" ");
-  assert.match(narration, /buildPlan/);
-  assert.match(narration, /resolveBase/);
-});
-
 test("lists generated files as omissions", async (t) => {
   const repo = await makeFixtureRepo();
   t.after(() => repo.cleanup());
@@ -141,7 +166,7 @@ test("lists generated files as omissions", async (t) => {
     repoPath: repo.dir,
     base: "main",
   });
-  const { plan } = await buildPlan({
+  const { plan } = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
@@ -165,7 +190,7 @@ test("never references deleted files in source locations", async (t) => {
     repoPath: repo.dir,
     base: "main",
   });
-  const { plan } = await buildPlan({
+  const { plan } = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
@@ -185,12 +210,12 @@ test("is deterministic for the same inventory and timestamp", async (t) => {
     repoPath: repo.dir,
     base: "main",
   });
-  const first = await buildPlan({
+  const first = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
   });
-  const second = await buildPlan({
+  const second = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
@@ -207,7 +232,7 @@ test("respects the maxScenes budget and reports omissions", async (t) => {
     repoPath: repo.dir,
     base: "main",
   });
-  const { plan, snapshot } = await buildPlan({
+  const { plan, snapshot } = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     maxScenes: 2,
@@ -217,7 +242,10 @@ test("respects the maxScenes budget and reports omissions", async (t) => {
   assert.equal(plan.scenes.length, 2);
   assert.equal(plan.scenes.at(-1)?.visual, "summary");
   assert.ok(plan.omissions.length > 0);
-  assert.equal(validatePlan(plan, { snapshot }).valid, true);
+  assert.equal(
+    validatePlan(plan, { snapshot, requireNarration: false }).valid,
+    true,
+  );
 });
 
 test("each scene carries a self-contained change list", async (t) => {
@@ -228,13 +256,16 @@ test("each scene carries a self-contained change list", async (t) => {
     repoPath: repo.dir,
     base: "main",
   });
-  const { plan, snapshot } = await buildPlan({
+  const { plan, snapshot } = await buildPlanScaffold({
     repositoryRoot: repo.dir,
     inventory,
     generatedAt: GENERATED_AT,
   });
 
-  assert.equal(validatePlan(plan, { snapshot }).valid, true);
+  assert.equal(
+    validatePlan(plan, { snapshot, requireNarration: false }).valid,
+    true,
+  );
 
   const codeScene = plan.scenes.find(
     (scene) => scene.visual === "code-walkthrough",
@@ -246,23 +277,4 @@ test("each scene carries a self-contained change list", async (t) => {
     .flatMap((scene) => scene.changes ?? [])
     .find((change) => change.path === "src/legacy.ts");
   assert.equal(deleted?.changeType, "deleted");
-});
-
-test("collectSymbols extracts declared names from added lines", () => {
-  const files = parseUnifiedDiff(
-    [
-      "diff --git a/x.ts b/x.ts",
-      "--- a/x.ts",
-      "+++ b/x.ts",
-      "@@ -0,0 +1,3 @@",
-      "+export function alpha() {}",
-      "+export const beta = 1;",
-      "+class Gamma {}",
-      "",
-    ].join("\n"),
-  );
-
-  const [file] = files;
-  assert.ok(file);
-  assert.deepEqual(collectSymbols(file.hunks, "+"), ["alpha", "beta", "Gamma"]);
 });

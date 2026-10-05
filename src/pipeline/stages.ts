@@ -22,7 +22,7 @@ import {
   type ValidationIssue,
 } from "../analysis/validatePlan.ts";
 import type { SourceSnapshot } from "../analysis/sourceSnapshot.ts";
-import { buildPlan } from "../planning/buildPlan.ts";
+import { buildPlanScaffold } from "../planning/buildPlan.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
 import type { RenderOptions } from "../render/RenderInput.ts";
 import type { RenderInput } from "../render/RenderInput.ts";
@@ -76,7 +76,7 @@ export class RunDirectoryError extends Error {
   }
 }
 
-/** Raised by {@link runPlan} when the generated plan fails validation. */
+/** Raised by {@link runScaffold} / {@link validateAuthoredPlan} when a plan fails validation. */
 export class PlanValidationError extends Error {
   readonly issues: ValidationIssue[];
   constructor(issues: ValidationIssue[]) {
@@ -156,10 +156,10 @@ export function runInspect(
 }
 
 // ---------------------------------------------------------------------------------------
-// Stage 2 — plan
+// Stage 2 — scaffold
 // ---------------------------------------------------------------------------------------
 
-export interface PlanStageOptions extends InspectStageOptions {
+export interface ScaffoldStageOptions extends InspectStageOptions {
   /** Total scenes including the closing summary. Defaults to 5. */
   maxScenes?: number;
   /** Overrides the generation timestamp (used for deterministic tests). */
@@ -168,21 +168,23 @@ export interface PlanStageOptions extends InspectStageOptions {
   inventory?: ChangeInventory;
 }
 
-export interface PlanStageResult {
+export interface ScaffoldStageResult {
   inventory: ChangeInventory;
   plan: ExplainerPlan;
   snapshot: SourceSnapshot;
 }
 
 /**
- * Builds and validates a scene plan. Accepts a pre-built inventory so the orchestrator does
- * not inspect the repository twice.
+ * Builds a **scaffold** scene plan: deterministic grouping, source locations, and suggested
+ * walkthrough steps, with narration left blank. The host coding agent reads the code and
+ * authors the narration, then calls the render path with `--plan`. Accepts a pre-built
+ * inventory so the orchestrator does not inspect the repository twice.
  */
-export async function runPlan(
-  options: PlanStageOptions,
-): Promise<PlanStageResult> {
+export async function runScaffold(
+  options: ScaffoldStageOptions,
+): Promise<ScaffoldStageResult> {
   const inventory = options.inventory ?? (await runInspect(options));
-  const { plan, snapshot } = await buildPlan({
+  const { plan, snapshot } = await buildPlanScaffold({
     repositoryRoot: inventory.repositoryRoot,
     inventory,
     ...(options.maxScenes !== undefined
@@ -193,10 +195,24 @@ export async function runPlan(
       : {}),
   });
 
-  const validation = validatePlan(plan, { snapshot });
+  const validation = validatePlan(plan, { snapshot, requireNarration: false });
   if (!validation.valid) throw new PlanValidationError(validation.errors);
 
   return { inventory, plan, snapshot };
+}
+
+/**
+ * Validates an authored plan (with narration) against the current repository source.
+ * Throws {@link PlanValidationError} with every issue so the caller can report them.
+ */
+export async function validateAuthoredPlan(
+  plan: ExplainerPlan,
+  repositoryRoot: string,
+): Promise<SourceSnapshot> {
+  const snapshot = await capturePlanSnapshot(plan, repositoryRoot);
+  const validation = validatePlan(plan, { snapshot });
+  if (!validation.valid) throw new PlanValidationError(validation.errors);
+  return snapshot;
 }
 
 // ---------------------------------------------------------------------------------------

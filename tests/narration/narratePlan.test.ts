@@ -34,7 +34,7 @@ function scene(id: string, narrationText: string): ExplainerScene {
 
 function makePlan(scenes?: ExplainerScene[]): ExplainerPlan {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     title: "Test plan",
     repositoryName: "repo",
     branchName: "feature/x",

@@ -9,6 +9,9 @@
  * Silent scenes (no measured narration) show the whole line for the scene duration instead.
  */
 import type { ExplainerScene } from "../planning/types.ts";
+import { sceneNarrationText } from "../planning/types.ts";
+import { distributeFrameWindows } from "./chunkTiming.ts";
+import { buildStepWindows } from "./steps.ts";
 import type { SceneTiming } from "./timeline.ts";
 
 export interface CaptionChunk {
@@ -50,33 +53,16 @@ export function buildCaptionChunks(
   const sentences = splitSentences(text);
   if (sentences.length === 0) return [];
 
-  const span = Math.max(1, Math.round(options.spanFrames));
-  const start = Math.max(0, Math.round(options.startFrame));
-  const end = start + span;
+  const windows = distributeFrameWindows(
+    sentences.map((sentence) => Array.from(sentence).length),
+    { startFrame: options.startFrame, spanFrames: options.spanFrames },
+  );
 
-  const weights = sentences.map((sentence) => Array.from(sentence).length);
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-
-  const chunks: CaptionChunk[] = [];
-  let boundary = start;
-  let cumulative = 0;
-
-  sentences.forEach((sentence, index) => {
-    cumulative += weights[index] ?? 0;
-    const isLast = index === sentences.length - 1;
-    const proportional = start + Math.round((span * cumulative) / totalWeight);
-    const rawEnd = isLast ? end : proportional;
-    const chunkEnd = Math.max(rawEnd, boundary + 1);
-
-    chunks.push({
-      text: sentence,
-      fromFrame: boundary,
-      durationInFrames: chunkEnd - boundary,
-    });
-    boundary = chunkEnd;
-  });
-
-  return chunks;
+  return sentences.map((sentence, index) => ({
+    text: sentence,
+    fromFrame: windows[index]?.fromFrame ?? 0,
+    durationInFrames: windows[index]?.durationInFrames ?? 1,
+  }));
 }
 
 /**
@@ -88,7 +74,20 @@ export function buildSceneCaptions(
   timing: SceneTiming | undefined,
   fps: number,
 ): CaptionChunk[] {
-  const text = scene.narrationText ?? "";
+  // Stepped scenes show one caption per step, matching the step windows exactly so the
+  // caption and the highlighted code always agree.
+  const steps = scene.steps ?? [];
+  if (steps.length > 0) {
+    return buildStepWindows(scene, timing, fps)
+      .filter((window) => window.narration.trim() !== "")
+      .map((window) => ({
+        text: window.narration.trim(),
+        fromFrame: window.fromFrame,
+        durationInFrames: window.durationInFrames,
+      }));
+  }
+
+  const text = sceneNarrationText(scene);
   if (text.trim() === "") return [];
 
   if (timing !== undefined && timing.narrated && timing.narrationMs !== null) {

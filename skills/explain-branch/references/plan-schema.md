@@ -5,12 +5,14 @@ Source of truth (keep in sync): `src/planning/types.ts` (`PLAN_SCHEMA_VERSION`) 
 
 ## Scene plan (`plan.json`)
 
-`PLAN_SCHEMA_VERSION = 2`. Written by the planner (`src/cli/planBranch.ts`) and rewritten by
-the narration stage (`src/cli/narrateBranch.ts`) with audio metadata filled in.
+`PLAN_SCHEMA_VERSION = 3`. **Authored by the host coding agent** (see
+`skills/explain-branch/SKILL.md`): the script writes only a narration-blank _scaffold_
+(`artifacts/branch-explain/plan.scaffold.json`) and then, once the agent supplies a plan,
+rewrites it with audio metadata via the narration stage.
 
 ```ts
 interface ExplainerPlan {
-  schemaVersion: number; // 2
+  schemaVersion: number; // 3
   title: string;
   repositoryName: string;
   branchName: string;
@@ -21,14 +23,22 @@ interface ExplainerPlan {
   caveats: string[];
 }
 
+interface SceneStep {
+  narration: string; // plain-English explanation of the highlighted lines
+  file: string; // repository-relative; must be one of the scene's sourceLocations
+  startLine: number; // 1-based, inclusive (a few lines)
+  endLine: number;
+}
+
 interface ExplainerScene {
   id: string; // unique
   title: string;
   purpose: string;
-  narrationText: string;
+  narrationText: string; // full script (the TTS input); should equal the steps joined
   visual: "code-walkthrough" | "diff" | "architecture" | "summary";
   sourceLocations: Array<{ file: string; startLine: number; endLine: number }>;
   highlights: Array<{ startLine: number; endLine: number; label?: string }>;
+  steps?: SceneStep[]; // ordered walkthrough; the renderer advances through them
   changes?: SceneChange[]; // path/changeType/language/added/deleted/isBinary/isGenerated
   diagramSpec?: {
     description: string;
@@ -40,11 +50,24 @@ interface ExplainerScene {
 }
 ```
 
+A `code-walkthrough` scene with `steps` plays them in order: the highlighted range advances as
+the narration plays, a few lines at a time. The renderer divides the scene's single audio clip
+across the steps in proportion to each step's narration length, and the captions follow the
+same windows, so highlight and caption always agree.
+
+**Authoring a step.** Read the code at the range (and enough context to understand it), then
+write one to three sentences explaining what those lines do. Assume the viewer may not know the
+language. Set the scene's `narrationText` to the step narrations joined with a space. Do not
+list files or counts; explain behaviour.
+
 **Validation** (`validatePlan`, `src/analysis/validatePlan.ts`): paths must be
 repository-relative (no absolute paths, no `..`); line ranges must fall within the captured
-source snapshot; highlights must sit inside a `sourceLocation`; scene ids must be unique;
-diagram edges must reference real nodes. With `requireNarrationAudio: true` every scene must
-have `narrationAudioPath` + a positive `narrationDurationMs`.
+source snapshot; highlights must sit inside a `sourceLocation`; step files must be one of the
+scene's `sourceLocations` and each step range must sit inside that location; scene ids must be
+unique; diagram edges must reference real nodes. The scaffold is validated with
+`requireNarration: false` (blank narration allowed); a plan handed to the renderer requires
+non-empty `narrationText` and step narration. With `requireNarrationAudio: true` every scene
+must have `narrationAudioPath` + a positive `narrationDurationMs`.
 
 ## Run report (`report.json`)
 
@@ -93,8 +116,8 @@ name; override with `--run-id`/`--run-dir`):
 
 ```
 artifacts/<run-id>/
-  branch-plan.json     # pre-narration checkpoint (enables resume without re-planning)
-  plan.json            # validated, narrated (redacted) plan
+  plan.json            # the plan you authored, rewritten with narration audio metadata
+  authored-plan.json   # checkpoint of the authored plan (enables resume without re-authoring)
   narration.txt        # narration script
   render-input.json    # exactly what was passed to the renderer (plan + sources)
   report.json          # the run report above
@@ -107,5 +130,5 @@ file (a timestamped name is used unless `--overwrite`).
 ## Privacy
 
 Narration text is derived from repository content and is sent to the configured TTS provider.
-Secret-looking values are redacted before transmission (`src/narration/redact.ts`), and the
-redactions applied are recorded in the report.
+Secret-looking values are redacted before transmission (`src/narration/redact.ts`) — including
+step captions — and the redactions applied are recorded in the report.

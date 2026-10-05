@@ -1,9 +1,10 @@
 import type { RenderInput } from "../RenderInput.ts";
 
 /**
- * Hand-written fixture plan used to render a deterministic silent video in Phase 3. It
- * mirrors the shape produced by `buildPlan`, including the self-contained `changes` list
- * and captured `sources`, so no repository access is required to render it.
+ * Hand-written fixture plan used to render a deterministic video. It mirrors the shape a
+ * host agent authors on top of the scaffold: multi-step code scenes with plain-English
+ * narration, the self-contained `changes` list, and captured `sources`, so no repository
+ * access is required to render it.
  */
 
 const gitTs = [
@@ -69,7 +70,7 @@ export const sampleInput: RenderInput = {
     "src/analysis/buildChangeInventory.ts": inventoryTs,
   },
   plan: {
-    schemaVersion: 2,
+    schemaVersion: 3,
     title: "Branch explainer: feature/read-only-inspection",
     repositoryName: "explain-branch",
     branchName: "feature/read-only-inspection",
@@ -79,14 +80,33 @@ export const sampleInput: RenderInput = {
       {
         id: "scene-1",
         title: "Changes in src/git",
-        purpose: "Show the code that changed in src/git and what the edits do.",
+        purpose: "Explain the code that changed in src/git.",
         narrationText:
-          "This change updates two files under src/git. git.ts is modified, with three lines added and one removed. It introduces or updates execFileText and describeFailure. parseDiff.ts is modified, with two lines added and two removed.",
+          "First, the git runner prefixes every command with --no-pager and runs it with a read-only environment. Those are the flags that stop Git from launching a pager or prompting, so inspection never hangs a render. Next, when the command fails it wraps the error in a GitError that carries the original arguments and exit code, so callers can report exactly what ran.",
         visual: "code-walkthrough",
         sourceLocations: [
           { file: "src/git/git.ts", startLine: 1, endLine: 12 },
         ],
-        highlights: [{ startLine: 5, endLine: 7 }],
+        highlights: [
+          { startLine: 5, endLine: 5 },
+          { startLine: 9, endLine: 9 },
+        ],
+        steps: [
+          {
+            narration:
+              "First, the git runner prefixes every command with --no-pager and runs it with a read-only environment. Those are the flags that stop Git from launching a pager or prompting, so inspection never hangs a render.",
+            file: "src/git/git.ts",
+            startLine: 5,
+            endLine: 5,
+          },
+          {
+            narration:
+              "Next, when the command fails it wraps the error in a GitError that carries the original arguments and exit code, so callers can report exactly what ran.",
+            file: "src/git/git.ts",
+            startLine: 9,
+            endLine: 9,
+          },
+        ],
         changes: [
           {
             path: "src/git/git.ts",
@@ -111,10 +131,9 @@ export const sampleInput: RenderInput = {
       {
         id: "scene-2",
         title: "Changes in src/analysis",
-        purpose:
-          "Show the code that changed in src/analysis and what the edits do.",
+        purpose: "Explain the code that changed in src/analysis.",
         narrationText:
-          "A new file, src/analysis/buildChangeInventory.ts, adds twelve lines. It introduces or updates buildChangeInventory and readMergeBase.",
+          "Here the inventory is assembled in one pass: it resolves the branch state, then works out the merge base to compare against. Using the merge base means the video describes only the commits this branch introduced, not unrelated work on the base branch. Finally it reads the changed files from the diff and returns them together with the working-tree state.",
         visual: "code-walkthrough",
         sourceLocations: [
           {
@@ -124,8 +143,31 @@ export const sampleInput: RenderInput = {
           },
         ],
         highlights: [
-          { startLine: 5, endLine: 6 },
-          { startLine: 8, endLine: 9 },
+          { startLine: 5, endLine: 5 },
+          { startLine: 8, endLine: 8 },
+        ],
+        steps: [
+          {
+            narration:
+              "Here the inventory is assembled in one pass: it resolves the branch state, then works out the merge base to compare against.",
+            file: "src/analysis/buildChangeInventory.ts",
+            startLine: 5,
+            endLine: 5,
+          },
+          {
+            narration:
+              "Using the merge base means the video describes only the commits this branch introduced, not unrelated work on the base branch.",
+            file: "src/analysis/buildChangeInventory.ts",
+            startLine: 8,
+            endLine: 8,
+          },
+          {
+            narration:
+              "Finally it reads the changed files from the diff and returns them together with the working-tree state.",
+            file: "src/analysis/buildChangeInventory.ts",
+            startLine: 9,
+            endLine: 9,
+          },
         ],
         changes: [
           {
@@ -144,7 +186,7 @@ export const sampleInput: RenderInput = {
         title: "Changes in src/legacy",
         purpose: "Summarise the removed code in src/legacy.",
         narrationText:
-          "src/legacy/runner.ts is deleted, removing twenty-four lines. The deleted code is summarised as a diff rather than shown as current source.",
+          "The old runner has been deleted. It is shown as a diff rather than as current source, because the code no longer exists on this branch — so the video never implies removed code is still there.",
         visual: "diff",
         sourceLocations: [],
         highlights: [],
@@ -165,7 +207,7 @@ export const sampleInput: RenderInput = {
         title: "Summary",
         purpose: "Summarise the branch and what it changes.",
         narrationText:
-          'Branch "feature/read-only-inspection" changes 4 file(s) relative to "main" (1 added, 2 modified, 1 deleted, 0 renamed) totalling 17 line(s) added and 27 removed. The main areas are src/git, src/analysis and src/legacy.',
+          "That covers the main changes: a read-only git runner, a single-pass change inventory built on the merge base, and the removal of the old legacy runner. The inspection code is deliberately side-effect free, so running the explainer never alters your repository.",
         visual: "summary",
         sourceLocations: [],
         highlights: [],
@@ -179,7 +221,7 @@ export const sampleInput: RenderInput = {
       },
     ],
     caveats: [
-      "Narration is derived mechanically from the diff; it describes what changed, not why.",
+      "Explanations describe what the changed code does, based on inspected source; the author's intent is not inferred.",
       "Only changes relative to the comparison base are covered.",
     ],
   },

@@ -65,7 +65,7 @@ function scene(id: string, narrationText: string): ExplainerScene {
 
 function plan(scenes: ExplainerScene[]): ExplainerPlan {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     title: "t",
     repositoryName: "r",
     branchName: "b",

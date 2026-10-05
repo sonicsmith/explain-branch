@@ -199,6 +199,77 @@ test("rejects a malformed change entry", () => {
   assert.match(text, /non-negative integers/);
 });
 
+test("accepts well-formed walkthrough steps inside a source location", () => {
+  const plan = validPlan();
+  plan.scenes[0].steps = [
+    {
+      narration: "This line names the feature.",
+      file: "src/app.ts",
+      startLine: 1,
+      endLine: 1,
+    },
+    {
+      narration: "This line holds the value.",
+      file: "src/app.ts",
+      startLine: 3,
+      endLine: 3,
+    },
+  ];
+  const result = run(plan);
+  assert.equal(result.valid, true, JSON.stringify(result.errors, null, 2));
+});
+
+test("rejects a step outside the scene's source locations", () => {
+  const plan = validPlan();
+  plan.scenes[0].steps = [
+    {
+      narration: "Out of range.",
+      file: "src/app.ts",
+      startLine: 1,
+      endLine: 9,
+    },
+  ];
+  assert.equal(run(plan).valid, false);
+  assert.match(messages(plan), /within the sourceLocation/);
+});
+
+test("rejects a step referencing a file not in the scene", () => {
+  const plan = validPlan();
+  plan.scenes[0].steps = [
+    {
+      narration: "Other file.",
+      file: "src/other.ts",
+      startLine: 1,
+      endLine: 1,
+    },
+  ];
+  assert.equal(run(plan).valid, false);
+  assert.match(messages(plan), /must be one of the scene's sourceLocations/);
+});
+
+test("rejects a blank step narration in an authored plan", () => {
+  const plan = validPlan();
+  plan.scenes[0].steps = [
+    { narration: "  ", file: "src/app.ts", startLine: 1, endLine: 1 },
+  ];
+  assert.equal(run(plan).valid, false);
+  assert.match(messages(plan), /step narration must be a non-empty string/);
+});
+
+test("allows blank narration for the scaffold when requireNarration is false", () => {
+  const plan = validPlan();
+  plan.scenes[0].narrationText = "";
+  plan.scenes[1].narrationText = "";
+  plan.scenes[0].steps = [
+    { narration: "", file: "src/app.ts", startLine: 1, endLine: 1 },
+  ];
+  const result = validatePlan(plan as ExplainerPlan, {
+    snapshot: SNAPSHOT,
+    requireNarration: false,
+  });
+  assert.equal(result.valid, true, JSON.stringify(result.errors, null, 2));
+});
+
 test("requires narration audio when asked to", () => {
   const plan = validPlan();
   const result = validatePlan(plan as ExplainerPlan, {

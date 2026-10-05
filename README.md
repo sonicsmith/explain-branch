@@ -4,10 +4,11 @@ A Codex plugin/skill that analyses the current Git branch and produces a **narra
 explainer video** showing what changed, how the changed code works, and how it fits the
 wider application.
 
-> **Status: Phase 5 — end-to-end integration implemented.** One command runs
-> inspect → plan → narrate → render → validate behind the `$explain-branch` skill, writing a
-> versioned run report and artifacts. See [`plan/overview.md`](plan/overview.md) and
-> [`docs/adr/0003-phase-5-integration-decisions.md`](docs/adr/0003-phase-5-integration-decisions.md).
+> **Status: Phase 6 — agent-authored, multi-step walkthroughs.** Explanations are authored by
+> the host coding agent (scaffold → author → render), not generated mechanically, and each code
+> scene walks through the change a few lines at a time. See [`plan/overview.md`](plan/overview.md),
+> [`plan/phase-6.md`](plan/phase-6.md) and
+> [`docs/adr/0004-agent-authored-explanations.md`](docs/adr/0004-agent-authored-explanations.md).
 
 ## Layout
 
@@ -30,17 +31,17 @@ wider application.
 │   │   ├── sourceSnapshot.ts       # read-only source capture
 │   │   └── validatePlan.ts         # plan schema validation
 │   ├── planning/
-│   │   ├── types.ts                # versioned scene-plan schema
+│   │   ├── types.ts                # versioned scene-plan schema (v3, multi-step)
 │   │   ├── paths.ts                # path-safety checks
-│   │   └── buildPlan.ts            # deterministic planner
+│   │   └── buildPlan.ts            # deterministic scaffold builder (no narration)
 │   ├── cli/
 │   │   ├── explainBranch.ts        # inspection CLI
-│   │   ├── planBranch.ts           # planning CLI
+│   │   ├── planBranch.ts           # scaffold CLI (agent authors the plan next)
 │   │   ├── narrateBranch.ts        # narration CLI
 │   │   ├── renderBranch.ts         # narrated-render CLI
-│   │   └── explainBranchVideo.ts   # end-to-end orchestrator (the entry point)
+│   │   └── explainBranchVideo.ts   # narrate+render orchestrator (entry point; needs --plan)
 │   ├── pipeline/                   # Phase 5 composition
-│   │   ├── stages.ts               # runInspect/runPlan/runNarrate/runRender
+│   │   ├── stages.ts               # runInspect/runScaffold/validateAuthoredPlan/runNarrate/runRender
 │   │   ├── report.ts               # run report + output artifacts
 │   │   ├── projectConfig.ts        # base/maxScenes repo defaults
 │   │   └── testHooks.ts            # offline test seams (env-gated)
@@ -57,7 +58,9 @@ wider application.
 │       ├── Root.tsx                # composition + timeline metadata
 │       ├── ExplainerVideo.tsx      # scene sequencing
 │       ├── timeline.ts             # narration-driven scene timing
-│       ├── captions.ts             # proportional per-sentence captions
+│       ├── steps.ts                # step windows for multi-step scenes
+│       ├── chunkTiming.ts          # proportional frame distribution (captions + steps)
+│       ├── captions.ts             # proportional per-sentence/per-step captions
 │       ├── audioSource.ts          # clip -> staticFile()/URL resolution
 │       ├── outputPath.ts           # never-overwrite output paths
 │       ├── RenderInput.ts          # { plan, sources, options } contract
@@ -80,30 +83,40 @@ wider application.
 - macOS 15+ for Remotion rendering (verified on macOS 26.6.2).
 - `OPENAI_API_KEY` in the environment for narration (later phases only).
 
-## Explain a branch (one command)
+## Explain a branch
+
+The explanations are **authored by the coding agent** running the `$explain-branch` skill (or by
+you), so the workflow is scaffold → author → render.
 
 ```bash
 npm install
-npm run browser:ensure                # one-time Chrome Headless Shell download
-export OPENAI_API_KEY=sk-...          # required for narration; read from the environment only
-npm run explain                       # inspect -> plan -> narrate -> render -> validate
+npm run browser:ensure                 # one-time Chrome Headless Shell download
+npm run plan -- --out artifacts/run/plan.scaffold.json   # 1. grouping + suggested steps
+# 2. read the code and author artifacts/run/plan.json (schema v3; see the skill docs)
+export OPENAI_API_KEY=sk-...           # required for narration; read from the environment only
+npm run explain -- --plan artifacts/run/plan.json        # 3. narrate -> render -> validate
 ```
 
-`npm run explain` (also the `$explain-branch` skill) needs no arguments: it resolves the base,
-plans the scenes, narrates them, renders the MP4, and validates the output. It writes only
-under `artifacts/` and never switches branches or edits tracked files.
+Step 2 is where the value is: for each scene the agent writes ordered `steps`, each highlighting
+a few lines with a plain-English explanation of what those lines do (assuming the viewer may not
+know the language), and sets `narrationText` to the steps joined. The script never writes
+narration — without `--plan` it stops (exit `3`) rather than producing a mechanical script. The
+skill ([`skills/explain-branch/SKILL.md`](skills/explain-branch/SKILL.md)) drives this end to end.
+
+It writes only under `artifacts/` and never switches branches or edits tracked files.
 
 Useful flags (full list in
 [`skills/explain-branch/references/flags.md`](skills/explain-branch/references/flags.md)):
 
 | Flag                     | Meaning                                               |
 | ------------------------ | ----------------------------------------------------- |
+| `--plan <path>`          | authored plan to narrate and render (required)        |
 | `--base <ref>`           | comparison base (default: auto-resolved)              |
 | `--include-working-tree` | include uncommitted changes                           |
 | `--max-scenes <n>`       | total scenes incl. the summary (default 5)            |
 | `--out <path>`           | output MP4 (default `artifacts/branch-explainer.mp4`) |
-| `--dry-run`              | plan + cost estimate only; no writes                  |
-| `--stdout`               | print the scene plan JSON and stop                    |
+| `--dry-run`              | narration cost estimate only; no writes               |
+| `--stdout`               | print the scaffold JSON and stop                      |
 | `--overwrite`            | replace an existing output (default: timestamped)     |
 | `--force`                | ignore the resume checkpoint                          |
 
@@ -116,8 +129,8 @@ Everything for a run lives in `artifacts/<run-id>/`:
 
 ```text
 artifacts/<run-id>/
-  branch-plan.json     # pre-narration checkpoint
-  plan.json            # validated, narrated plan
+  plan.json            # the authored plan, rewritten with narration audio metadata
+  authored-plan.json   # checkpoint of the authored plan (enables resume without re-authoring)
   narration.txt        # narration script
   render-input.json    # props passed to the renderer
   report.json          # machine-readable run report
@@ -127,7 +140,7 @@ artifacts/<run-id>/
 The MP4 defaults to `artifacts/branch-explainer.mp4`. stdout carries only the run report JSON;
 progress and the human summary go to stderr.
 
-**Exit codes:** `0` success · `2` base/config could not be resolved · `3` plan failed
+**Exit codes:** `0` success · `2` base/config could not be resolved · `3` plan missing or failed
 validation · `4` missing/rejected `OPENAI_API_KEY` · the renderer's exit code on render failure
 · `1` other.
 
@@ -140,8 +153,8 @@ directory is kept and a resume command is printed. The run-directory and report 
 
 - **TTS needs a key and network.** Without `OPENAI_API_KEY` the run stops before planning
   (exit `4`); it never renders a silent video in its place.
-- **Large branches may be summarised.** The planner prioritises the most consequential changes
-  and lists what it omitted in the plan/report — it does not narrate every file.
+- **Large branches may be summarised.** The scaffold prioritises the most consequential changes
+  and lists what it omitted in the plan/report — the agent does not narrate every file.
 - **Diagrams are optional** and currently minimal; they never invent components absent from the
   inspected code.
 - **Read-only by design.** No branch switching, commits, or writes to tracked files; output
@@ -165,19 +178,20 @@ When the choice is ambiguous the CLI exits `2` with guidance. Everything runs th
 read-only Git runner: no checkout/reset/stash/commit, `--no-ext-diff`/`--no-textconv` so
 repository-configured programs never execute, and writes are confined to `artifacts/`.
 
-## Build a scene plan
+## Build a scene scaffold
 
 ```bash
-npm run plan                    # writes artifacts/branch-plan.json
-npm run plan -- --stdout        # print the plan instead of writing
+npm run plan                    # writes artifacts/plan.scaffold.json
+npm run plan -- --stdout        # print the scaffold instead of writing
 npm run plan -- --max-scenes 3
 ```
 
-The planner groups related files into logical scenes (not one scene per file), ranks them,
-and emits a versioned JSON plan matching `src/planning/types.ts`. Every referenced file and
-line range is verified against a read-only source snapshot before the plan is accepted
+The scaffold groups related files into logical scenes (not one scene per file), ranks them,
+and suggests walkthrough steps with **blank narration**, matching `src/planning/types.ts` (v3).
+Every referenced file and line range is verified against a read-only source snapshot
 (`src/analysis/validatePlan.ts`); generated files become omissions and honest caveats are
-attached. The plan is deterministic for a given inventory and timestamp.
+attached. The scaffold is deterministic for a given inventory and timestamp. The host agent then
+reads the code and authors the narration/steps to produce `plan.json`.
 
 ## Render a video
 
@@ -190,14 +204,15 @@ npm run studio                      # interactive preview
 The Remotion composition (`src/render/index.ts`, id `ExplainBranch`) receives a fully
 serializable `{ plan, sources, options }` input, so the video shows real captured code and
 never touches the repository while rendering. Code scenes are syntax-highlighted with Shiki
-(fine-grained bundle, JavaScript engine — no wasm fetch), scroll to the discussed lines and
-fade in highlight bands; deletions render as diff summaries; the closing scene summarises
-the branch, its omissions, and caveats.
+(fine-grained bundle, JavaScript engine — no wasm fetch). A scene with `steps` advances through
+the change a few lines at a time: the highlighted range moves and the view scrolls to each step
+as its narration plays, and the caption for each step matches its highlight. Deletions render as
+diff summaries; the closing scene summarises the branch, its omissions, and caveats.
 
 ## Narrate a video
 
-The one-command flow above runs all of this; the stage CLIs below remain available for
-advanced or manual use.
+The scaffold → author → render flow above runs all of this; the stage CLIs below remain
+available for advanced or manual use.
 
 ```bash
 export OPENAI_API_KEY=sk-...          # required; read from the environment only

@@ -18,6 +18,12 @@ export interface CodeFrameProps {
   focusLine: number;
   maxVisibleLines?: number;
   delayFrames?: number;
+  /**
+   * Scene-relative frame at which this view began. When a stepped scene swaps to a new
+   * highlight range, the component remounts with the step's start frame so the scroll and
+   * highlight animations replay from that point instead of being already complete.
+   */
+  startFrame?: number;
 }
 
 export function splitLines(content: string): string[] {
@@ -38,8 +44,10 @@ export function CodeFrame({
   focusLine,
   maxVisibleLines = layout.maxVisibleLines,
   delayFrames = 6,
+  startFrame = 0,
 }: CodeFrameProps) {
   const frame = useCurrentFrame();
+  const localFrame = frame - startFrame;
   const allLines = useMemo(() => splitLines(content), [content]);
   const tokens = useHighlightedLines(content, language);
 
@@ -54,18 +62,28 @@ export function CodeFrame({
   const lead = Math.min(4, target - 1);
   const startLineNumber = Math.max(1, target - lead);
 
-  const scrollProgress = interpolate(frame - delayFrames, [0, 22], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: Easing.out(Easing.cubic),
-  });
+  const scrollProgress = interpolate(
+    localFrame - delayFrames,
+    [0, 22],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: Easing.out(Easing.cubic),
+    },
+  );
   const translateY = -lead * layout.lineHeight * scrollProgress;
 
-  const highlightOpacity = interpolate(frame - delayFrames, [16, 34], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
-  const frameOpacity = interpolate(frame, [0, 10], [0, 1], {
+  const highlightOpacity = interpolate(
+    localFrame - delayFrames,
+    [16, 34],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    },
+  );
+  const frameOpacity = interpolate(localFrame, [0, 10], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });

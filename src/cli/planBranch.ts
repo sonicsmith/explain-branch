@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 /**
- * Phase 2 scene-planning CLI.
+ * Scene-scaffold CLI.
  *
- * Builds a validated scene plan from the current branch's change inventory and writes it
- * to `artifacts/branch-plan.json` (or prints it with --stdout). Read-only with respect to
- * source: the only file it writes is the plan artifact under `artifacts/`.
+ * Builds the deterministic **scaffold** for a branch (grouping, source locations, suggested
+ * walkthrough steps) and writes it to `artifacts/plan.scaffold.json` (or prints it with
+ * `--stdout`). The scaffold has no narration: the host coding agent reads the code and
+ * authors the plan (see `skills/explain-branch/SKILL.md`), then renders it via
+ * `npm run explain -- --plan <path>`. Read-only with respect to source.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { BaseResolutionError } from "../analysis/buildChangeInventory.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
 import { GitError } from "../git/git.ts";
-import { PlanValidationError, runPlan } from "../pipeline/stages.ts";
+import { PlanValidationError, runScaffold } from "../pipeline/stages.ts";
 
 interface CliOptions {
   base?: string;
@@ -23,7 +25,7 @@ interface CliOptions {
   help: boolean;
 }
 
-const HELP = `explain-branch plan — build a validated scene plan (writes only under artifacts/)
+const HELP = `explain-branch plan — build the scene scaffold for a branch (writes only under artifacts/)
 
 Usage:
   explain-branch-plan [options]
@@ -32,12 +34,15 @@ Options:
   --base <ref>             Compare against this ref (highest precedence)
   --include-working-tree   Include uncommitted working-tree changes
   --repo <path>            Path inside the repository (default: cwd)
-  --out <path>             Output path (default: <repo>/artifacts/branch-plan.json)
+  --out <path>             Output path (default: <repo>/artifacts/plan.scaffold.json)
   --max-scenes <n>         Total scenes including the summary (default: 5)
-  --stdout                 Print the plan JSON instead of writing a file
+  --stdout                 Print the scaffold JSON instead of writing a file
   -h, --help               Show this help
 
-Exit codes: 0 success, 2 base could not be determined, 3 plan failed validation, 1 other error.
+The scaffold has no narration. The host coding agent authors the explanations and steps, then
+renders with:  npm run explain -- --plan <plan.json>
+
+Exit codes: 0 success, 2 base could not be determined, 3 scaffold failed validation, 1 other.
 `;
 
 function splitFlag(
@@ -148,7 +153,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    const { inventory, plan } = await runPlan({
+    const { inventory, plan } = await runScaffold({
       base: options.base,
       includeWorkingTree: options.includeWorkingTree,
       repoPath: options.repoPath,
@@ -164,7 +169,7 @@ async function main(): Promise<void> {
 
     const outputPath =
       options.outPath ??
-      path.join(inventory.repositoryRoot, "artifacts", "branch-plan.json");
+      path.join(inventory.repositoryRoot, "artifacts", "plan.scaffold.json");
     await mkdir(path.dirname(outputPath), { recursive: true });
     await writeFile(outputPath, json, "utf8");
 
@@ -176,7 +181,7 @@ async function main(): Promise<void> {
       return;
     }
     if (error instanceof PlanValidationError) {
-      console.error("error: the generated plan failed validation:");
+      console.error("error: the generated scaffold failed validation:");
       for (const issue of error.issues) {
         console.error(`  - ${issue.path}: ${issue.message}`);
       }

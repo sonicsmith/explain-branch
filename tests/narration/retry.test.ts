@@ -113,7 +113,7 @@ test("gives up after maxAttempts", async () => {
 
 function makePlan(): ExplainerPlan {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     title: "t",
     repositoryName: "r",
     branchName: "feature/x",

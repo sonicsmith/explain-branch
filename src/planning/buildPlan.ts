@@ -6,7 +6,6 @@ import {
   captureSourceSnapshot,
   type SourceSnapshot,
 } from "../analysis/sourceSnapshot.ts";
-import type { DiffHunk } from "../git/parseDiff.ts";
 import {
   PLAN_SCHEMA_VERSION,
   type CodeHighlight,
@@ -14,11 +13,12 @@ import {
   type ExplainerScene,
   type PlanOmission,
   type SceneChange,
+  type SceneStep,
   type SceneVisual,
   type SourceLocation,
 } from "./types.ts";
 
-export interface BuildPlanOptions {
+export interface BuildPlanScaffoldOptions {
   repositoryRoot: string;
   inventory: ChangeInventory;
   /** Total scenes including the closing summary. Defaults to 5. */
@@ -29,7 +29,7 @@ export interface BuildPlanOptions {
   snapshot?: SourceSnapshot;
 }
 
-export interface BuildPlanResult {
+export interface BuildPlanScaffoldResult {
   plan: ExplainerPlan;
   snapshot: SourceSnapshot;
 }
@@ -42,21 +42,6 @@ interface Group {
 
 const DOC_LANGUAGES = new Set(["markdown", "text"]);
 const CONFIG_LANGUAGES = new Set(["json", "jsonc", "yaml", "toml", "ini"]);
-
-/** Declaration patterns used to name the symbols a change introduces or removes. */
-const DECLARATION_PATTERNS: readonly RegExp[] = [
-  /\bexport\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
-  /\b(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/,
-  /\bexport\s+(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)/,
-  /\bclass\s+([A-Za-z_$][\w$]*)/,
-  /\bexport\s+interface\s+([A-Za-z_$][\w$]*)/,
-  /\binterface\s+([A-Za-z_$][\w$]*)/,
-  /\bexport\s+type\s+([A-Za-z_$][\w$]*)/,
-  /\bexport\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/,
-  /\bdef\s+([A-Za-z_][\w]*)/,
-  /\bfunc\s+([A-Za-z_][\w]*)/,
-  /\bfn\s+([A-Za-z_][\w]*)/,
-];
 
 function normalize(filePath: string): string {
   return filePath.replace(/\\/g, "/");
@@ -102,65 +87,6 @@ function scoreGroup(files: readonly InventoryFile[]): number {
     score += magnitude(file) * weight(file);
   }
   return Math.round(score * 100) / 100;
-}
-
-export function collectSymbols(
-  hunks: readonly DiffHunk[],
-  sign: "+" | "-",
-): string[] {
-  const found: string[] = [];
-  for (const hunk of hunks) {
-    for (const line of hunk.lines) {
-      if (!line.startsWith(sign)) continue;
-      const text = line.slice(1);
-      for (const pattern of DECLARATION_PATTERNS) {
-        const match = pattern.exec(text);
-        const name = match?.[1];
-        if (name !== undefined) {
-          if (!found.includes(name)) found.push(name);
-          break;
-        }
-      }
-      if (found.length >= 5) return found;
-    }
-  }
-  return found;
-}
-
-function formatList(items: readonly string[]): string {
-  if (items.length === 0) return "";
-  if (items.length === 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1] ?? ""}`;
-}
-
-function symbolSentence(file: InventoryFile, sign: "+" | "-"): string {
-  const symbols = collectSymbols(file.hunks, sign);
-  if (symbols.length === 0) return "";
-  const verb = sign === "+" ? "introduces or updates" : "removes";
-  return ` It ${verb} ${formatList(symbols)}.`;
-}
-
-function describeFile(file: InventoryFile): string {
-  if (file.isBinary) {
-    return `${file.path} is a binary file that changed.`;
-  }
-
-  const language = file.language === "unknown" ? "" : ` ${file.language}`;
-
-  switch (file.changeType) {
-    case "added":
-      return `A new${language} file, ${file.path}, adds ${file.addedLineCount} line(s).${symbolSentence(file, "+")}`;
-    case "deleted":
-      return `${file.path} is deleted, removing ${file.deletedLineCount} line(s).${symbolSentence(file, "-")}`;
-    case "renamed":
-      return `${file.oldPath ?? "a file"} is renamed to ${file.path}.${symbolSentence(file, "+")}`;
-    case "copied":
-      return `${file.oldPath ?? "a file"} is copied to ${file.path}.${symbolSentence(file, "+")}`;
-    case "type-changed":
-      return `The file type of ${file.path} changed.`;
-    default:
-      return `${file.path} is modified, with ${file.addedLineCount} line(s) added and ${file.deletedLineCount} removed.${symbolSentence(file, "+")}`;
-  }
 }
 
 function whereLabel(key: string): string {
@@ -260,23 +186,41 @@ function toSceneChange(file: InventoryFile): SceneChange {
   };
 }
 
-function buildGroupNarration(group: Group): string {
-  const files = group.files;
-  const sentences: string[] = [
-    `This change updates ${files.length} file${files.length === 1 ? "" : "s"} under ${whereLabel(group.key)}.`,
-  ];
+/**
+ * Suggests walkthrough steps for a scene: one step per contiguous run of added lines that
+ * falls inside a source location. The narration is left blank — the host coding agent fills
+ * it in by reading the code. This is the scaffold, not the final plan.
+ */
+function buildSteps(
+  files: readonly InventoryFile[],
+  locations: readonly SourceLocation[],
+  limit = 6,
+): SceneStep[] {
+  const steps: SceneStep[] = [];
 
-  for (const file of files.slice(0, 4)) {
-    sentences.push(describeFile(file));
+  for (const location of locations) {
+    const file = files.find((candidate) => candidate.path === location.file);
+    if (file === undefined) continue;
+
+    for (const hunk of file.hunks) {
+      for (const range of hunk.addedRanges) {
+        if (steps.length >= limit) return steps;
+        if (
+          range.startLine >= location.startLine &&
+          range.endLine <= location.endLine
+        ) {
+          steps.push({
+            narration: "",
+            file: location.file,
+            startLine: range.startLine,
+            endLine: range.endLine,
+          });
+        }
+      }
+    }
   }
 
-  if (files.length > 4) {
-    sentences.push(
-      `${files.length - 4} further file(s) changed here and are not walked through individually.`,
-    );
-  }
-
-  return sentences.join(" ");
+  return steps;
 }
 
 function buildGroupScene(
@@ -285,71 +229,29 @@ function buildGroupScene(
   snapshot: SourceSnapshot,
 ): ExplainerScene {
   const locations = buildLocations(group.files, snapshot);
+  const steps = buildSteps(group.files, locations);
   return {
     id: `scene-${index + 1}`,
     title: `Changes in ${whereLabel(group.key)}`,
-    purpose: `Show the code that changed in ${whereLabel(group.key)} and what the edits do.`,
-    narrationText: buildGroupNarration(group),
+    purpose: `Explain the code that changed in ${whereLabel(group.key)}.`,
+    // Left blank: the host agent authors the narration from the inspected source.
+    narrationText: "",
     visual: chooseVisual(group.files),
+    // Cover every location a step references, so step ranges stay inside a source location.
     sourceLocations: locations,
     highlights: buildHighlights(group.files, locations),
+    ...(steps.length > 0 ? { steps } : {}),
     changes: group.files.map(toSceneChange),
   };
 }
 
-function countByChangeType(
-  files: readonly InventoryFile[],
-): Record<string, number> {
-  const counts: Record<string, number> = {
-    added: 0,
-    modified: 0,
-    deleted: 0,
-    renamed: 0,
-    copied: 0,
-  };
-  for (const file of files) {
-    counts[file.changeType] = (counts[file.changeType] ?? 0) + 1;
-  }
-  return counts;
-}
-
-function buildSummaryScene(
-  inventory: ChangeInventory,
-  ranked: readonly Group[],
-  omissionCount: number,
-): ExplainerScene {
-  const files = inventory.files.filter((file) => !file.isGenerated);
-  const counts = countByChangeType(files);
-  const added = files.reduce((total, file) => total + file.addedLineCount, 0);
-  const deleted = files.reduce(
-    (total, file) => total + file.deletedLineCount,
-    0,
-  );
-
-  const sentences: string[] = [];
-  sentences.push(
-    `Branch "${branchNameOf(inventory)}" changes ${inventory.files.length} file(s) relative to "${inventory.base?.ref ?? "(unresolved)"}"`,
-  );
-  sentences.push(
-    `(${counts.added ?? 0} added, ${counts.modified ?? 0} modified, ${counts.deleted ?? 0} deleted, ${counts.renamed ?? 0} renamed)`,
-  );
-  sentences.push(`totalling ${added} line(s) added and ${deleted} removed.`);
-
-  const areas = ranked.slice(0, 3).map((group) => whereLabel(group.key));
-  if (areas.length > 0) {
-    sentences.push(`The main areas are ${formatList(areas)}.`);
-  }
-  if (omissionCount > 0) {
-    sentences.push(
-      `${omissionCount} changed file(s) are not covered in detail.`,
-    );
-  }
-
+function buildSummaryScene(): ExplainerScene {
+  // The scaffold only reserves the summary scene; the host agent authors its narration.
   return {
     id: "summary",
     title: "Summary",
     purpose: "Summarise the branch and what it changes.",
-    narrationText: sentences.join(" "),
+    narrationText: "",
     visual: "summary",
     sourceLocations: [],
     highlights: [],
@@ -364,7 +266,7 @@ function branchNameOf(inventory: ChangeInventory): string {
 
 function buildCaveats(inventory: ChangeInventory): string[] {
   const caveats: string[] = [
-    "Narration is derived mechanically from the diff; it describes what changed, not why.",
+    "Explanations describe what the changed code does, based on inspected source; the author's intent is not inferred.",
     "Only changes relative to the comparison base are covered.",
   ];
 
@@ -438,13 +340,15 @@ function dedupeOmissions(omissions: readonly PlanOmission[]): PlanOmission[] {
 }
 
 /**
- * Turns a change inventory into a validated-shape scene plan. Deterministic: the same
- * inventory and `generatedAt` produce an identical plan. The planner only makes claims it
- * can ground in the diff (paths, counts, change types, declared symbol names).
+ * Turns a change inventory into a **scaffold** scene plan: deterministic grouping, source
+ * locations, and suggested walkthrough steps with all narration left blank. The host coding
+ * agent fills in the narration by reading the code (see `skills/explain-branch/SKILL.md`);
+ * the planner never invents explanations. Deterministic: the same inventory and `generatedAt`
+ * produce an identical scaffold, so the agent's plan stays reproducible.
  */
-export async function buildPlan(
-  options: BuildPlanOptions,
-): Promise<BuildPlanResult> {
+export async function buildPlanScaffold(
+  options: BuildPlanScaffoldOptions,
+): Promise<BuildPlanScaffoldResult> {
   const { repositoryRoot, inventory } = options;
   const maxScenes = Math.max(1, options.maxScenes ?? 5);
   const generatedAt = options.generatedAt ?? new Date().toISOString();
@@ -486,7 +390,7 @@ export async function buildPlan(
   }
 
   const dedupedOmissions = dedupeOmissions(omissions);
-  scenes.push(buildSummaryScene(inventory, ranked, dedupedOmissions.length));
+  scenes.push(buildSummaryScene());
 
   const plan: ExplainerPlan = {
     schemaVersion: PLAN_SCHEMA_VERSION,

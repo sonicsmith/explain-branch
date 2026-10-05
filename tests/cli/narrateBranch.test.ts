@@ -32,7 +32,7 @@ function runCli(args: string[], env: NodeJS.ProcessEnv): Promise<CliRun> {
 
 function planJson(): string {
   return JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     title: "CLI test",
     repositoryName: "repo",
     branchName: "feature/x",

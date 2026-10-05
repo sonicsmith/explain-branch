@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { TempRepo } from "../helpers/tempRepo.ts";
@@ -74,12 +74,84 @@ async function featureRepo(): Promise<TempRepo> {
   return repo;
 }
 
+/**
+ * Writes an authored (schema v3) plan — the script never authors narration, so tests must
+ * supply one — into the run directory, and returns its path for `--plan`.
+ */
+async function writeAuthoredPlan(
+  repo: TempRepo,
+  runId: string,
+): Promise<string> {
+  const planPath = path.join(repo.dir, "artifacts", runId, "plan.json");
+  const plan = {
+    schemaVersion: 3,
+    title: "Branch explainer: feature/x",
+    repositoryName: repo.dir.split("/").pop(),
+    branchName: "feature/x",
+    baseRef: "main",
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    scenes: [
+      {
+        id: "scene-1",
+        title: "Changes in src",
+        purpose: "Explain the changed code.",
+        narrationText:
+          "First we add a constant b. Then we export a helper that returns one.",
+        visual: "code-walkthrough",
+        sourceLocations: [{ file: "src/app.ts", startLine: 1, endLine: 2 }],
+        highlights: [{ startLine: 1, endLine: 2 }],
+        steps: [
+          {
+            narration: "First we add a constant b.",
+            file: "src/app.ts",
+            startLine: 2,
+            endLine: 2,
+          },
+          {
+            narration: "Then we export a helper that returns one.",
+            file: "src/app.ts",
+            startLine: 1,
+            endLine: 1,
+          },
+        ],
+        changes: [
+          {
+            path: "src/app.ts",
+            changeType: "modified",
+            language: "typescript",
+            addedLines: 2,
+            deletedLines: 1,
+            isBinary: false,
+            isGenerated: false,
+          },
+        ],
+      },
+      {
+        id: "summary",
+        title: "Summary",
+        purpose: "Summarise the branch.",
+        narrationText: "That is the change in this branch.",
+        visual: "summary",
+        sourceLocations: [],
+        highlights: [],
+        changes: [],
+      },
+    ],
+    omissions: [],
+    caveats: [],
+  };
+  await mkdir(path.dirname(planPath), { recursive: true });
+  await writeFile(planPath, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
+  return planPath;
+}
+
 test("runs the pipeline end to end offline: report, artifacts, no tracked change", async () => {
   const repo = await featureRepo();
   try {
+    const authoredPlan = await writeAuthoredPlan(repo, "e2e");
     const result = await runCli(
       ORCHESTRATOR,
-      ["--repo", repo.dir, "--run-id", "e2e"],
+      ["--repo", repo.dir, "--run-id", "e2e", "--plan", authoredPlan],
       offlineEnv(),
     );
     assert.equal(result.code, 0, `stderr: ${result.stderr}`);
@@ -207,17 +279,19 @@ test("an unreadable plan exits 3 with the file path", async () => {
 test("an existing output is never silently overwritten", async () => {
   const repo = await featureRepo();
   try {
+    const planC1 = await writeAuthoredPlan(repo, "c1");
     const first = await runCli(
       ORCHESTRATOR,
-      ["--repo", repo.dir, "--run-id", "c1"],
+      ["--repo", repo.dir, "--run-id", "c1", "--plan", planC1],
       offlineEnv(),
       repo.dir,
     );
     assert.equal(first.code, 0, `stderr: ${first.stderr}`);
 
+    const planC2 = await writeAuthoredPlan(repo, "c2");
     const second = await runCli(
       ORCHESTRATOR,
-      ["--repo", repo.dir, "--run-id", "c2"],
+      ["--repo", repo.dir, "--run-id", "c2", "--plan", planC2],
       offlineEnv(),
       repo.dir,
     );
@@ -237,9 +311,10 @@ test("an existing output is never silently overwritten", async () => {
 test("a failed render keeps artifacts and a re-run resumes without regenerating audio", async () => {
   const repo = await featureRepo();
   try {
+    const authoredPlan = await writeAuthoredPlan(repo, "resume");
     const failed = await runCli(
       ORCHESTRATOR,
-      ["--repo", repo.dir, "--run-id", "resume"],
+      ["--repo", repo.dir, "--run-id", "resume", "--plan", authoredPlan],
       offlineEnv({ EXPLAIN_BRANCH_TEST_RENDER_FAIL: "1" }),
       repo.dir,
     );
@@ -258,7 +333,7 @@ test("a failed render keeps artifacts and a re-run resumes without regenerating 
 
     const resumed = await runCli(
       ORCHESTRATOR,
-      ["--repo", repo.dir, "--run-id", "resume"],
+      ["--repo", repo.dir, "--run-id", "resume", "--plan", authoredPlan],
       offlineEnv(),
       repo.dir,
     );

@@ -51,8 +51,9 @@ import {
   resolveRunDir,
   runInspect,
   runNarrate,
-  runPlan,
   runRender,
+  runScaffold,
+  validateAuthoredPlan,
   type NarrateStageResult,
 } from "../pipeline/stages.ts";
 
@@ -61,6 +62,7 @@ interface CliOptions {
   base?: string;
   includeWorkingTree: boolean;
   maxScenes?: number;
+  plan?: string;
   runId?: string;
   runDir?: string;
   outPath?: string;
@@ -88,16 +90,17 @@ Usage:
   explain-branch-video [options]
 
 Options:
+  --plan <path>            Authored plan JSON to narrate and render (required unless --stdout)
   --base <ref>             Compare against this ref (default: auto-resolved)
   --include-working-tree   Include uncommitted working-tree changes (default: false)
   --max-scenes <n>         Total scenes including the summary (default: 5, or the project config)
-  --stdout                 Print the scene plan JSON to stdout and stop (no narration/render)
+  --stdout                 Print the scene scaffold JSON to stdout and stop (no narration/render)
   --run-id <id>            Run directory name (default: the branch name)
   --run-dir <path>         Explicit run directory (default: <repo>/artifacts/<run-id>)
   --out <path>             Output MP4 (default: <repo>/artifacts/branch-explainer.mp4)
   --force                  Re-plan and regenerate even when a resume is possible
   --overwrite              Allow replacing an existing output (default: timestamped name)
-  --dry-run                Plan + cost estimate only; no audio, no render
+  --dry-run                Narrate the plan for a cost estimate only; no audio, no render
   --provider <name>        Narration provider (default: openai)
   --model <id>             TTS model (default: gpt-4o-mini-tts)
   --voice <name>           Voice (default: marin)
@@ -106,12 +109,15 @@ Options:
   --repo <path>            Path inside the repository (default: cwd)
   -h, --help               Show this help
 
-Artifacts are written under the run directory: branch-plan.json, plan.json (narrated),
-narration.txt, audio/<scene>.wav, render-input.json, and report.json. Narration requires
-OPENAI_API_KEY.
+Artifacts are written under the run directory: plan.json (narrated), narration.txt,
+audio/<scene>.wav, render-input.json, and report.json. Narration requires OPENAI_API_KEY.
+
+This command does not write explanations. Run \`npm run plan\` to get a scaffold, author the
+narration and steps (the host coding agent does this — see skills/explain-branch/SKILL.md),
+then render with \`npm run explain -- --plan <plan.json>\`.
 
 Progress and pre-flight disclosure are written to stderr; stdout carries only the final
-machine-readable result (the run report JSON; the plan JSON with --stdout; a JSON summary
+machine-readable result (the run report JSON; the scaffold JSON with --stdout; a JSON summary
 with --dry-run).
 
 Defaults can be set per repository in .explain-branch.json or package.json
@@ -182,6 +188,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case "--repo":
         options.repoPath = takeValue();
+        break;
+      case "--plan":
+        options.plan = takeValue();
         break;
       case "--run-id":
         options.runId = takeValue();
@@ -392,10 +401,10 @@ async function main(): Promise<void> {
     log(`Run dir:      ${runDir}`);
     log(`Scenes:       up to ${maxScenes ?? 5} (including the summary)`);
 
-    // --stdout is a plan-only mode: no narration, no render, and no files written.
+    // --stdout is a scaffold-only mode: no narration, no render, and no files written.
     if (options.stdout) {
-      log("[2/5] Building a scene plan (stdout)...");
-      const { plan } = await runPlan({
+      log("[2/5] Building the scene scaffold (stdout)...");
+      const { plan } = await runScaffold({
         inventory,
         ...(maxScenes !== undefined ? { maxScenes } : {}),
       });
@@ -421,10 +430,48 @@ async function main(): Promise<void> {
       }`,
     );
 
+    // The explanations are authored by the host coding agent, not by this script. Require an
+    // authored plan so a mechanically-generated (and unhelpful) script is never produced.
+    //
+    // Credentials are pre-flighted first so a missing key fails fast (exit 4) with a setup
+    // message rather than a "no plan" error; we never fall back to a silent render.
+    if (!options.dryRun && !useFakeTts) readOpenAiApiKey();
+
+    if (options.plan === undefined) {
+      throw new PlanValidationError([
+        {
+          path: "plan",
+          message:
+            "no plan provided. Run `npm run plan` for a scaffold, author the narration and steps, then re-run with --plan <plan.json>.",
+        },
+      ]);
+    }
+
+    const authoredPath = path.resolve(repositoryRoot, options.plan);
+    let authoredPlan: ExplainerPlan;
+    try {
+      const raw = await readFile(authoredPath, "utf8");
+      authoredPlan = JSON.parse(raw) as ExplainerPlan;
+    } catch (error) {
+      throw new PlanValidationError([
+        {
+          path: authoredPath,
+          message: `could not read the plan JSON: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        },
+      ]);
+    }
+    log(`Plan:         ${authoredPath}`);
+    await validateAuthoredPlan(authoredPlan, repositoryRoot);
+    context.planned = true;
+
     let narratedPlan: ExplainerPlan | null = null;
     let narrateResult: NarrateStageResult | null = null;
 
-    if (!options.force && !options.dryRun) {
+    // Resume only when the authored plan is the run's own narrated plan.json; a different
+    // authored plan must be (re)narrated so the video reflects it.
+    if (!options.force && !options.dryRun && authoredPath === planPath) {
       narratedPlan = await tryResumeNarratedPlan(planPath, repositoryRoot);
       if (narratedPlan !== null) {
         log(`[2/5] Reusing the validated narrated plan at ${planPath}`);
@@ -433,25 +480,13 @@ async function main(): Promise<void> {
     }
 
     if (narratedPlan === null) {
-      // Fail fast (exit 4) with a setup message before any planning or narration work: a
-      // narrated video cannot be produced without credentials, and we never fall back to a
-      // silent render. The offline test seam substitutes a provider instead.
-      if (!options.dryRun && !useFakeTts) readOpenAiApiKey();
-
-      log("[2/5] Building a scene plan...");
-      const { plan } = await runPlan({
-        inventory,
-        ...(maxScenes !== undefined ? { maxScenes } : {}),
-      });
-      context.planned = true;
-
-      // Checkpoint the pre-narration plan so a failed narration can resume without re-planning.
+      // Checkpoint the authored plan so a failed narration can resume without re-authoring.
       // A dry run writes nothing at all.
       if (!options.dryRun) {
         await mkdir(runDir, { recursive: true });
         await writeFile(
-          path.join(runDir, "branch-plan.json"),
-          `${JSON.stringify(plan, null, 2)}\n`,
+          path.join(runDir, "authored-plan.json"),
+          `${JSON.stringify(authoredPlan, null, 2)}\n`,
           "utf8",
         );
       }
@@ -459,7 +494,7 @@ async function main(): Promise<void> {
       log("[3/5] Generating narration...");
       const narrate = await runNarrate({
         repositoryRoot,
-        plan,
+        plan: authoredPlan,
         runDir,
         relativeAudioDir,
         config,

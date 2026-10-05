@@ -4,7 +4,7 @@
  * {@link PLAN_SCHEMA_VERSION} on breaking changes.
  */
 
-export const PLAN_SCHEMA_VERSION = 2;
+export const PLAN_SCHEMA_VERSION = 3;
 
 export type SceneVisual =
   | "code-walkthrough"
@@ -86,14 +86,37 @@ export interface SceneChange {
   isGenerated: boolean;
 }
 
+/**
+ * One step of a scene's code walkthrough. Each step pairs a short stretch of code (a few
+ * lines) with a plain-English explanation of what those lines do. A scene plays its steps
+ * in order: the highlighted range advances as its narration plays, so the viewer is walked
+ * through the change a few lines at a time instead of being shown one static block.
+ *
+ * Steps are authored by the host coding agent (see `skills/explain-branch/SKILL.md`); the
+ * script never invents narration. `SceneStep.narration`, joined in order, should make up the
+ * scene's `narrationText` so captions, audio, and highlights stay aligned.
+ */
+export interface SceneStep {
+  /** Plain-English explanation of what the highlighted lines do. */
+  narration: string;
+  /** Repository-relative path the step focuses on (one of the scene's sourceLocations). */
+  file: string;
+  /** Small 1-based, inclusive line range highlighted while this step's narration plays. */
+  startLine: number;
+  endLine: number;
+}
+
 export interface ExplainerScene {
   id: string;
   title: string;
   purpose: string;
+  /** Full scene narration (the TTS input). When `steps` are present this should be their narrations joined. */
   narrationText: string;
   visual: SceneVisual;
   sourceLocations: SourceLocation[];
   highlights: CodeHighlight[];
+  /** Ordered walkthrough steps; the renderer advances through them as narration plays. */
+  steps?: SceneStep[];
   changes?: SceneChange[];
   diagramSpec?: DiagramSpec;
   narrationAudioPath?: string;
@@ -115,4 +138,19 @@ export interface ExplainerPlan {
   scenes: ExplainerScene[];
   omissions: PlanOmission[];
   caveats: string[];
+}
+
+/**
+ * The narration text for a scene: the step narrations joined in order when steps are
+ * present, otherwise the scene's `narrationText`. Used by the TTS/caption/report layers so
+ * a stepped scene stays self-consistent even if `narrationText` drifts from the steps.
+ */
+export function sceneNarrationText(scene: ExplainerScene): string {
+  const steps = scene.steps ?? [];
+  if (steps.length === 0) return scene.narrationText ?? "";
+  const joined = steps
+    .map((step) => (step.narration ?? "").trim())
+    .filter((text) => text !== "")
+    .join(" ");
+  return joined !== "" ? joined : (scene.narrationText ?? "");
 }

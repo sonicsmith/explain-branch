@@ -9,7 +9,7 @@
  * This is a safety net, not a guarantee — repository content shown on screen (code frames) is
  * not rewritten, so users must still avoid narrating secrets.
  */
-import type { ExplainerPlan } from "../planning/types.ts";
+import type { ExplainerPlan, ExplainerScene } from "../planning/types.ts";
 
 export interface Redaction {
   /** Category of secret that matched, e.g. `openai-key`. */
@@ -105,11 +105,30 @@ export function redactPlanNarration(plan: ExplainerPlan): RedactPlanResult {
 
   const scenes = plan.scenes.map((scene) => {
     const { text, redactions } = redactSecrets(scene.narrationText);
-    if (redactions.length === 0) return scene;
+    // Step narrations are shown as captions, so they must be scrubbed too.
+    const stepResults = (scene.steps ?? []).map((step) =>
+      redactSecrets(step.narration ?? ""),
+    );
+    const allRedactions = [
+      ...redactions,
+      ...stepResults.flatMap((result) => result.redactions),
+    ];
+    if (allRedactions.length === 0) return scene;
 
-    reports.push({ sceneId: scene.id, redactions });
-    totalRedactions += redactions.reduce((sum, entry) => sum + entry.count, 0);
-    return { ...scene, narrationText: text };
+    reports.push({ sceneId: scene.id, redactions: allRedactions });
+    totalRedactions += allRedactions.reduce(
+      (sum, entry) => sum + entry.count,
+      0,
+    );
+
+    const next: ExplainerScene = { ...scene, narrationText: text };
+    if (scene.steps !== undefined) {
+      next.steps = scene.steps.map((step, index) => ({
+        ...step,
+        narration: stepResults[index]?.text ?? step.narration,
+      }));
+    }
+    return next;
   });
 
   if (reports.length === 0) {
