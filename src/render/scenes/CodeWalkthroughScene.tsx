@@ -1,6 +1,5 @@
 import { useCurrentFrame } from "remotion";
 import type { ExplainerScene, SourceLocation } from "../../planning/types.ts";
-import { ChangeList } from "../components/ChangeList.tsx";
 import {
   CodeFrame,
   type CodeHighlightRange,
@@ -75,23 +74,14 @@ export function CodeWalkthroughScene({
     changes.find((change) => change.path === location.file)?.language ?? "text";
 
   return (
-    <div style={{ display: "flex", gap: 28, height: "100%" }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <CodeFrame
-          key={stepKey}
-          file={location.file}
-          language={language}
-          content={content}
-          highlights={highlights}
-          focusLine={focusLine}
-          startFrame={transitionFromFrame}
-        />
-      </div>
-      {changes.length > 0 ? (
-        <div style={{ width: 560, flexShrink: 0 }}>
-          <ChangeList changes={changes} title="Changed files" />
-        </div>
-      ) : null}
-    </div>
+    <CodeFrame
+      key={stepKey}
+      file={location.file}
+      language={language}
+      content={content}
+      highlights={highlights}
+      focusLine={focusLine}
+      startFrame={transitionFromFrame}
+    />
   );
 }
