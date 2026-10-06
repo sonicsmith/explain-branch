@@ -3,17 +3,19 @@
   "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "Codex plugin that turns the current Git branch into a narrated explainer video.",
+  "description": "Command-line tool that turns the current Git branch into a narrated explainer video.",
   "license": "MIT",
+  "bin": {
+    "explain-branch": "bin/explain-branch.ts"
+  },
   "scripts": {
-    "hello": "node skills/explain-branch/scripts/hello.ts",
-    "inspect": "node src/cli/explainBranch.ts",
-    "plan": "node src/cli/planBranch.ts",
-    "narrate": "node src/cli/narrateBranch.ts",
-    "explain": "node src/cli/explainBranchVideo.ts",
+    "inspect": "node bin/explain-branch.ts inspect",
+    "plan": "node bin/explain-branch.ts plan",
+    "narrate": "node bin/explain-branch.ts narrate",
+    "explain": "node bin/explain-branch.ts explain",
     "studio": "remotion studio src/render/index.ts",
     "render:fixture": "remotion render src/render/index.ts ExplainBranch artifacts/render-fixture.mp4",
-    "render:narrated": "node src/cli/renderBranch.ts",
+    "render:narrated": "node bin/explain-branch.ts render",
     "test": "node --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "browser:ensure": "remotion browser ensure"
