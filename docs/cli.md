@@ -119,9 +119,10 @@ command is printed. Repository defaults can be set in `.explain-branch.json` or 
 ## Workflow
 
 1. **Identify the branch and base.** Resolve a comparison base in this precedence: 1. a base you
-   supplied; 2. a configured base (`.explain-branch.json` / `package.json`); 3. the
-   upstream/tracking branch; 4. a conventional base (`main`/`master`) only if it exists and is
-   unambiguous; 5. otherwise you must pass `--base`. A merge-base comparison is used.
+   supplied; 2. a configured base (`.explain-branch.json` / `package.json`); 3. the remote's
+   default branch (`origin/HEAD`, e.g. `origin/main`); 4. an upstream/tracking branch, unless it
+   is the current branch's own remote copy (which would compare the branch against itself); 5. a conventional base (`main`/`master`) only if it exists and is unambiguous; 6. otherwise
+   you must pass `--base`. A merge-base comparison is used.
 2. **State the plan before long work.** Note which branch and base will be analysed and whether
    uncommitted changes are included.
 3. **Scaffold** (`explain-branch plan`) — grouping, source locations, and suggested steps.

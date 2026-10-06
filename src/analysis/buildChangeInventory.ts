@@ -22,7 +22,11 @@ export interface InventoryFile {
   path: string;
   oldPath: string | null;
   changeType: ChangeType;
-  /** Whether the change is committed on the branch or an uncommitted working-tree edit. */
+  /**
+   * `"working-tree"` when the captured content comes from the working tree (the path
+   * differs from HEAD); `"branch"` when it matches HEAD. When working-tree changes are
+   * included, the working tree takes precedence for a path changed in both places.
+   */
   source: "branch" | "working-tree";
   language: string;
   isGenerated: boolean;
@@ -177,21 +181,24 @@ export async function buildChangeInventory(
     resolvedBase.ref,
   );
 
-  const branchDiff = (
-    await git([...DIFF_FLAGS, compareRef, "HEAD"], state.repositoryRoot)
-  ).stdout;
-  const files: InventoryFile[] = parseUnifiedDiff(branchDiff).map((parsed) =>
-    toInventoryFile(parsed, "branch"),
-  );
-
   const includeWorkingTree = options.includeWorkingTree === true;
+  const dirtyPaths = new Set(workingTree.changedPaths);
+  let files: InventoryFile[];
+
   if (includeWorkingTree) {
+    // Diff the working tree against the merge base so committed and uncommitted changes for
+    // the same path are consolidated into one entry whose hunks share a frame of reference
+    // with the snapshot content (the working tree on disk). Paths that differ from HEAD are
+    // attributed to the working tree, which then takes precedence.
     const workingDiff = (
-      await git([...DIFF_FLAGS, "HEAD"], state.repositoryRoot)
+      await git([...DIFF_FLAGS, compareRef], state.repositoryRoot)
     ).stdout;
-    for (const parsed of parseUnifiedDiff(workingDiff)) {
-      files.push(toInventoryFile(parsed, "working-tree"));
-    }
+    files = parseUnifiedDiff(workingDiff).map((parsed) =>
+      toInventoryFile(
+        parsed,
+        dirtyPaths.has(parsed.path) ? "working-tree" : "branch",
+      ),
+    );
 
     for (const untrackedPath of workingTree.untrackedPaths) {
       const generated = classifyGenerated(untrackedPath);
@@ -212,13 +219,22 @@ export async function buildChangeInventory(
 
     if (workingTree.isDirty) {
       warnings.push(
-        'Working-tree changes are included (source: "working-tree"); they are uncommitted and not part of the branch history. Untracked files are listed but their line counts are not measured.',
+        'Working-tree changes are included (source: "working-tree"); they are uncommitted and not part of the branch history. For a path changed both on the branch and in the working tree, the working-tree content takes precedence. Untracked files are listed but their line counts are not measured.',
       );
     }
-  } else if (workingTree.isDirty) {
-    warnings.push(
-      "The working tree has uncommitted changes that are NOT included. Pass --include-working-tree to include them.",
+  } else {
+    const branchDiff = (
+      await git([...DIFF_FLAGS, compareRef, "HEAD"], state.repositoryRoot)
+    ).stdout;
+    files = parseUnifiedDiff(branchDiff).map((parsed) =>
+      toInventoryFile(parsed, "branch"),
     );
+
+    if (workingTree.isDirty) {
+      warnings.push(
+        "The working tree has uncommitted changes that are NOT included. Pass --include-working-tree to include them.",
+      );
+    }
   }
 
   if (ahead === 0 && files.length === 0 && !workingTree.isDirty) {

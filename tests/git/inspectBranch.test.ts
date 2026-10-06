@@ -6,6 +6,7 @@ import {
   BaseResolutionError,
   type ChangeInventory,
 } from "../../src/analysis/buildChangeInventory.ts";
+import { captureSourceSnapshot } from "../../src/analysis/sourceSnapshot.ts";
 import { TempRepo } from "../helpers/tempRepo.ts";
 
 function findFile(inventory: ChangeInventory, filePath: string) {
@@ -145,6 +146,20 @@ test("excludes working-tree changes by default and includes them on request", as
       (file) => file.source === "working-tree" && file.path === "src/app.ts",
     ),
   );
+
+  // A path changed both on the branch and in the working tree is consolidated into a single
+  // entry that takes the working-tree content, so hunks and snapshot stay coherent.
+  const appFiles = included.files.filter((file) => file.path === "src/app.ts");
+  assert.equal(appFiles.length, 1);
+  assert.equal(appFiles[0]?.source, "working-tree");
+
+  const snapshot = await captureSourceSnapshot(
+    repo.dir,
+    included.files.map((file) => ({ path: file.path, source: file.source })),
+  );
+  assert.ok(
+    (snapshot.lines("src/app.ts") ?? []).some((line) => line.includes("= 3")),
+  );
 });
 
 test("never modifies repository state", async (t) => {
@@ -210,4 +225,60 @@ test("reports a shallow clone", async (t) => {
       warning.toLowerCase().includes("shallow"),
     ),
   );
+});
+
+test("prefers the remote default branch over a same-named upstream", async (t) => {
+  const repo = await TempRepo.create();
+  t.after(() => repo.cleanup());
+
+  await repo.write("src/app.ts", "export const a = 1;\n");
+  await repo.commit("base");
+
+  await repo.git(["checkout", "-b", "feature"]);
+  await repo.write("src/app.ts", "export const a = 2;\n");
+  await repo.commit("branch change");
+
+  // Simulate a pushed feature branch: origin/feature (same name) tracks HEAD, while the
+  // remote's default branch is main.
+  await repo.git(["remote", "add", "origin", repo.dir]);
+  const mainSha = (await repo.git(["rev-parse", "main"])).trim();
+  const featureSha = (await repo.git(["rev-parse", "feature"])).trim();
+  await repo.git(["update-ref", "refs/remotes/origin/main", mainSha]);
+  await repo.git(["update-ref", "refs/remotes/origin/feature", featureSha]);
+  await repo.git([
+    "symbolic-ref",
+    "refs/remotes/origin/HEAD",
+    "refs/remotes/origin/main",
+  ]);
+  await repo.git(["branch", "--set-upstream-to=origin/feature", "feature"]);
+
+  const inventory = await buildChangeInventory({ repoPath: repo.dir });
+
+  assert.equal(inventory.base?.source, "remote");
+  assert.equal(inventory.base?.ref, "origin/main");
+  assert.ok(findFile(inventory, "src/app.ts"));
+});
+
+test("ignores an upstream that is the current branch's own remote copy", async (t) => {
+  const repo = await TempRepo.create();
+  t.after(() => repo.cleanup());
+
+  await repo.write("src/app.ts", "export const a = 1;\n");
+  await repo.commit("base");
+
+  await repo.git(["checkout", "-b", "feature"]);
+  await repo.write("src/app.ts", "export const a = 2;\n");
+  await repo.commit("branch change");
+
+  // No origin/HEAD: the only remote-tracking ref is the branch's own copy, which must be
+  // skipped so the conventional base is used instead of an empty comparison.
+  await repo.git(["remote", "add", "origin", repo.dir]);
+  const featureSha = (await repo.git(["rev-parse", "feature"])).trim();
+  await repo.git(["update-ref", "refs/remotes/origin/feature", featureSha]);
+  await repo.git(["branch", "--set-upstream-to=origin/feature", "feature"]);
+
+  const inventory = await buildChangeInventory({ repoPath: repo.dir });
+
+  assert.equal(inventory.base?.source, "conventional");
+  assert.equal(inventory.base?.ref, "main");
 });

@@ -8,26 +8,26 @@ render → validate. It requires `--plan`; it writes only under the run director
 The explanations are authored by you, not by the script. Use `npm run plan` for a scaffold
 first (see [`cli.md`](./cli.md)).
 
-| Flag                     | Meaning                                                      | Default                                                    |
-| ------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| `--plan <path>`          | Authored plan JSON to narrate and render                     | **required** unless `--stdout`                             |
-| `--base <ref>`           | Comparison base                                              | auto-resolved (flag > config > upstream > `main`/`master`) |
-| `--include-working-tree` | Include uncommitted working-tree changes                     | `false`                                                    |
-| `--max-scenes <n>`       | Total scenes including the summary                           | `5` (or project config)                                    |
-| `--provider <name>`      | Narration provider                                           | `openai`                                                   |
-| `--model <id>`           | TTS model                                                    | `gpt-4o-mini-tts`                                          |
-| `--voice <name>`         | Voice                                                        | `marin`                                                    |
-| `--format <fmt>`         | Audio format (`mp3`/`opus`/`aac`/`flac`/`wav`/`pcm`)         | `wav`                                                      |
-| `--instructions <txt>`   | Tone/style instructions (`gpt-4o-mini-tts` only)             | built-in default                                           |
-| `--out <path>`           | Output MP4                                                   | `<repo>/artifacts/branch-explainer.mp4`                    |
-| `--run-id <id>`          | Run directory name                                           | sanitised branch name                                      |
-| `--run-dir <path>`       | Explicit run directory                                       | `<repo>/artifacts/<run-id>`                                |
-| `--force`                | Ignore the resume checkpoint (re-plan and regenerate)        | `false`                                                    |
-| `--overwrite`            | Replace an existing output                                   | `false` (a timestamped name is used)                       |
-| `--dry-run`              | Narration cost estimate only; no audio, no render, no writes | `false`                                                    |
-| `--stdout`               | Scaffold-only: print the scene scaffold JSON and stop        | `false`                                                    |
-| `--repo <path>`          | Path inside the repository                                   | cwd                                                        |
-| `-h`, `--help`           | Show help                                                    | —                                                          |
+| Flag                     | Meaning                                                      | Default                                                                    |
+| ------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `--plan <path>`          | Authored plan JSON to narrate and render                     | **required** unless `--stdout`                                             |
+| `--base <ref>`           | Comparison base                                              | auto-resolved (flag > config > `origin/HEAD` > upstream > `main`/`master`) |
+| `--include-working-tree` | Include uncommitted working-tree changes                     | `false`                                                                    |
+| `--max-scenes <n>`       | Total scenes including the summary                           | `5` (or project config)                                                    |
+| `--provider <name>`      | Narration provider                                           | `openai`                                                                   |
+| `--model <id>`           | TTS model                                                    | `gpt-4o-mini-tts`                                                          |
+| `--voice <name>`         | Voice                                                        | `marin`                                                                    |
+| `--format <fmt>`         | Audio format (`mp3`/`opus`/`aac`/`flac`/`wav`/`pcm`)         | `wav`                                                                      |
+| `--instructions <txt>`   | Tone/style instructions (`gpt-4o-mini-tts` only)             | built-in default                                                           |
+| `--out <path>`           | Output MP4                                                   | `<repo>/artifacts/branch-explainer.mp4`                                    |
+| `--run-id <id>`          | Run directory name                                           | sanitised branch name                                                      |
+| `--run-dir <path>`       | Explicit run directory                                       | `<repo>/artifacts/<run-id>`                                                |
+| `--force`                | Ignore the resume checkpoint (re-plan and regenerate)        | `false`                                                                    |
+| `--overwrite`            | Replace an existing output                                   | `false` (a timestamped name is used)                                       |
+| `--dry-run`              | Narration cost estimate only; no audio, no render, no writes | `false`                                                                    |
+| `--stdout`               | Scaffold-only: print the scene scaffold JSON and stop        | `false`                                                                    |
+| `--repo <path>`          | Path inside the repository                                   | cwd                                                                        |
+| `-h`, `--help`           | Show help                                                    | —                                                                          |
 
 ### Exit codes
 

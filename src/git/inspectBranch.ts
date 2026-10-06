@@ -3,7 +3,12 @@ import { readFile } from "node:fs/promises";
 import { git, gitOrNull } from "./git.ts";
 
 /** How the comparison base was chosen (see plan §6 for the precedence order). */
-export type BaseSource = "explicit" | "config" | "upstream" | "conventional";
+export type BaseSource =
+  | "explicit"
+  | "config"
+  | "remote"
+  | "upstream"
+  | "conventional";
 
 export interface BranchState {
   repositoryRoot: string;
@@ -128,9 +133,17 @@ export interface ResolveBaseArgs {
   configured?: string | null | undefined;
 }
 
+/** Strips the remote prefix from an upstream ref (e.g. `origin/main` -> `main`). */
+function upstreamBranchName(ref: string): string {
+  const slash = ref.indexOf("/");
+  return slash === -1 ? ref : ref.slice(slash + 1);
+}
+
 /**
  * Resolves the comparison base using the documented precedence:
- * explicit > configured > upstream > unambiguous conventional base.
+ * explicit > configured > remote default branch > upstream > conventional base.
+ * An upstream is ignored when it is merely the current branch's own remote copy
+ * (which would compare HEAD against itself and yield an empty diff).
  * Throws {@link BaseResolutionError} when the choice is unsafe and the user must decide.
  */
 export async function resolveBase(
@@ -156,6 +169,22 @@ export async function resolveBase(
     return { ref: configured, source: "config" };
   }
 
+  // Prefer the remote's default branch (origin/HEAD -> e.g. origin/main); it is the base a pull
+  // request typically targets. Unlike a same-named upstream, it stays useful when reached from
+  // the default branch itself (it then reflects unpushed commits).
+  const remoteHead =
+    (
+      await gitOrNull(["rev-parse", "--abbrev-ref", "origin/HEAD"], cwd)
+    )?.stdout.trim() ?? "";
+  if (
+    remoteHead !== "" &&
+    remoteHead !== "origin/HEAD" &&
+    (await refExists(cwd, remoteHead))
+  ) {
+    return { ref: remoteHead, source: "remote" };
+  }
+
+  // An upstream is only a useful base when it is not the current branch's own remote copy.
   const upstream =
     (
       await gitOrNull(
@@ -165,8 +194,8 @@ export async function resolveBase(
     )?.stdout.trim() ?? "";
   if (
     upstream !== "" &&
-    upstream !== currentBranch &&
-    (await refExists(cwd, upstream))
+    (await refExists(cwd, upstream)) &&
+    upstreamBranchName(upstream) !== currentBranch
   ) {
     return { ref: upstream, source: "upstream" };
   }
