@@ -2,7 +2,9 @@
  * Credential handling for narration (Phase 4 §1).
  *
  * Rules (see ADR 0002, Decision 1):
- * - Read `OPENAI_API_KEY` from the environment **only** — never from the repository.
+ * - Read `OPENAI_API_KEY` from the process environment, which may be populated from a local,
+ *   gitignored `.env` file (the dispatcher passes `--env-file-if-exists=.env`) — never from
+ *   tracked repository files.
  * - A missing/rejected key must stop with a clear setup message and a non-zero exit; the
  *   pipeline must never claim narration is available.
  * - Never write the key to logs, the plan, the video, or captions.
@@ -14,9 +16,9 @@ export const OPENAI_API_KEY_ENV = "OPENAI_API_KEY";
 export class MissingCredentialError extends Error {
   constructor() {
     super(
-      `Narration requires the ${OPENAI_API_KEY_ENV} environment variable, but it is not set.\n` +
-        `Set it in your shell (do not commit it) and re-run, for example:\n` +
-        `  export ${OPENAI_API_KEY_ENV}=sk-...\n` +
+      `Narration requires ${OPENAI_API_KEY_ENV}, but it is not set.\n` +
+        `Add it to a local .env file (copy .env.example) or export it in your shell, then re-run:\n` +
+        `  cp .env.example .env   # then set ${OPENAI_API_KEY_ENV}=sk-... (do not commit it)\n` +
         `No narration audio was generated.`,
     );
     this.name = "MissingCredentialError";

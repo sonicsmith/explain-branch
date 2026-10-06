@@ -7,6 +7,10 @@
  * through unmodified (important for `--stdout` piping and for the orchestrator's
  * machine-readable report).
  *
+ * Each subcommand is launched with `--env-file-if-exists=.env`, so a local `.env` in the
+ * current directory (copy `.env.example`) is loaded automatically. A real environment
+ * variable still takes precedence, and `.env` should never be committed.
+ *
  * Usage:
  *   explain-branch <command> [options]
  *
@@ -104,9 +108,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  const child = spawn(process.execPath, [commandPath(command.file), ...rest], {
-    stdio: "inherit",
-  });
+  const child = spawn(
+    process.execPath,
+    ["--env-file-if-exists=.env", commandPath(command.file), ...rest],
+    { stdio: "inherit" },
+  );
 
   const [code, signal] = await new Promise<
     [code: number | null, signal: NodeJS.Signals | null]

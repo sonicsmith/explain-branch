@@ -6,7 +6,7 @@ renderer, so it requires `OPENAI_API_KEY`, network access, and Chrome Headless S
 ## Prerequisites
 
 ```bash
-export OPENAI_API_KEY=sk-...      # required; read from the environment only
+cp .env.example .env              # then put your real OPENAI_API_KEY in .env
 npm install
 npm run browser:ensure            # one-time Chrome Headless Shell download
 ```

@@ -11,7 +11,8 @@ authored plan it stops (exit `3`) rather than emitting a mechanically-generated 
 
 - Node.js `>= 22.18` — runs `.ts` files directly, no build step.
 - macOS 15+ for Remotion rendering.
-- `OPENAI_API_KEY` in the environment for narration (OpenAI Text-to-Speech API).
+- `OPENAI_API_KEY` for narration (OpenAI Text-to-Speech API) — put it in a local `.env` file
+  (copy `.env.example`) or set it in the environment.
 
 ## Commands
 
@@ -34,12 +35,15 @@ Run from the repository you want explained:
 ```bash
 npm install
 npm run browser:ensure            # one-time Chrome Headless Shell download
-export OPENAI_API_KEY=sk-...      # read from the environment only
+cp .env.example .env              # then put your real OPENAI_API_KEY in .env
 
 npm run plan -- --out artifacts/run/plan.scaffold.json   # 1. scaffold (grouping + steps)
 # 2. read the code and author artifacts/run/plan.json (see below)
 npm run explain -- --plan artifacts/run/plan.json        # 3. narrate → render → validate
 ```
+
+`.env` is loaded automatically from the current directory (a real `OPENAI_API_KEY` in the
+environment takes precedence). It is gitignored — never commit it.
 
 The MP4 defaults to `artifacts/branch-explainer.mp4`.
 
@@ -83,7 +87,7 @@ callers to understand what the code does. Then write `plan.json` (schema v3, see
 ### 3. Narrate and render
 
 ```bash
-export OPENAI_API_KEY=sk-...   # required; read from the environment only
+# OPENAI_API_KEY is read from .env (copy .env.example) or the environment
 npm run explain -- --plan artifacts/run/plan.json
 ```
 
@@ -155,7 +159,7 @@ command is printed. Repository defaults can be set in `.explain-branch.json` or 
 
 - **Sent to the TTS provider:** the narration text per scene (derived from the diff). Nothing
   else.
-- **Never sent:** the API key — read from the environment only, never written to the plan, logs,
-  or video.
+- **Never sent:** the API key — read from the environment (or a local, gitignored `.env`),
+  never written to the plan, logs, or video.
 - Secret-looking values are redacted from narration before transmission.
 - The narration voice is **AI-generated**, not a human voice.

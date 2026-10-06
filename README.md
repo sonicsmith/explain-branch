@@ -12,7 +12,8 @@ plan it stops rather than emitting a mechanical script. See [`docs/cli.md`](docs
 
 - Node.js `>= 22.18` — runs `.ts` files directly, no build step.
 - macOS 15+ for Remotion rendering.
-- `OPENAI_API_KEY` in the environment for narration (OpenAI Text-to-Speech API).
+- `OPENAI_API_KEY` for narration (OpenAI Text-to-Speech API) — put it in a local `.env` file
+  (copy `.env.example`) or set it in the environment.
 
 ## Quick start
 
@@ -21,12 +22,15 @@ Run from the repository you want explained:
 ```bash
 npm install
 npm run browser:ensure            # one-time Chrome Headless Shell download
-export OPENAI_API_KEY=sk-...      # read from the environment only
+cp .env.example .env              # then put your real OPENAI_API_KEY in .env
 
 npm run plan -- --out artifacts/run/plan.scaffold.json   # 1. scaffold (grouping + steps)
 # 2. author artifacts/run/plan.json (schema v3 — see docs/cli.md)
 npm run explain -- --plan artifacts/run/plan.json        # 3. narrate → render → validate
 ```
+
+`.env` is loaded automatically from the current directory (a real `OPENAI_API_KEY` in the
+environment takes precedence). It is gitignored — never commit it.
 
 The tool resolves the branch/base; you read the changed code and author the plan and per-scene
 narration; then it narrates, renders, and validates the MP4. Everything is written under
@@ -53,8 +57,8 @@ options.
 ## Privacy
 
 - **Sent to OpenAI:** the narration text per scene (derived from the diff). Nothing else.
-- **Never sent:** the API key — read from the environment only, never written to the plan,
-  logs, or video.
+- **Never sent:** the API key — read from the environment (or a local, gitignored `.env`),
+  never written to the plan, logs, or video.
 - Secret-looking values are redacted from narration before transmission.
 - The narration voice is **AI-generated**, not a human voice.
 
