@@ -17,5 +17,4 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "skills", "tests"]
-}
+  "include": ["src", "tests"]
