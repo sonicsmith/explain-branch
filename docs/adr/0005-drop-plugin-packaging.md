@@ -40,6 +40,11 @@ Node/TypeScript and have no host dependency.
 - **Authoring model:** narration is authored **by the user**, not a host agent. The scaffold →
   author → render flow is unchanged; only who authors changes. (Calling a chat model from the
   script was considered and rejected for now — see below.)
+
+> **Historical note (2026-10-06):** the "author by the user" decision was revisited the same
+> day. See [ADR 0006](0006-cli-authored-narration.md): the CLI now authors the narration itself
+> with a chat model by default, and `--plan` still accepts a hand-authored plan.
+
 - ADR 0001 Decision 1, ADR 0003 Decision 6, and ADR 0004 are marked historical rather than
   rewritten; they remain an accurate record of the plugin era.
 

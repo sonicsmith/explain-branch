@@ -92,7 +92,8 @@ export interface SceneChange {
  * in order: the highlighted range advances as its narration plays, so the viewer is walked
  * through the change a few lines at a time instead of being shown one static block.
  *
- * Steps are authored by you (see `docs/cli.md`); the script never invents narration.
+ * Steps are authored from the scaffold (by the CLI's authoring stage, or by you when you pass
+ * `--plan`) — never mechanically generated. See `docs/cli.md`.
  * `SceneStep.narration`, joined in order, should make up the scene's `narrationText` so
  * captions, audio, and highlights stay aligned.
  */

@@ -24,6 +24,8 @@ import {
 import type { SourceSnapshot } from "../analysis/sourceSnapshot.ts";
 import { buildPlanScaffold } from "../planning/buildPlan.ts";
 import type { ExplainerPlan } from "../planning/types.ts";
+import { authorPlan, type AuthorPlanResult } from "../authoring/authorPlan.ts";
+import type { AuthorProvider } from "../authoring/provider.ts";
 import type { RenderOptions } from "../render/RenderInput.ts";
 import type { RenderInput } from "../render/RenderInput.ts";
 import { resolveOutputPath } from "../render/outputPath.ts";
@@ -181,9 +183,9 @@ export interface ScaffoldStageResult {
 
 /**
  * Builds a **scaffold** scene plan: deterministic grouping, source locations, and suggested
- * walkthrough steps, with narration left blank. The author reads the code and authors the
- * narration, then calls the render path with `--plan`. Accepts a pre-built inventory so the
- * orchestrator does not inspect the repository twice.
+ * walkthrough steps, with narration left blank. The narration is authored afterwards — by the
+ * orchestrator's authoring stage, or by whoever supplies a plan with `--plan`. Accepts a
+ * pre-built inventory so the orchestrator does not inspect the repository twice.
  */
 export async function runScaffold(
   options: ScaffoldStageOptions,
@@ -218,6 +220,32 @@ export async function validateAuthoredPlan(
   const validation = validatePlan(plan, { snapshot });
   if (!validation.valid) throw new PlanValidationError(validation.errors);
   return snapshot;
+}
+
+// ---------------------------------------------------------------------------------------
+// Stage 2b — author
+// ---------------------------------------------------------------------------------------
+
+export interface AuthorStageOptions {
+  /** The scaffold plan to fill in. */
+  plan: ExplainerPlan;
+  /** The scaffold's captured source, used to build the excerpts sent to the model. */
+  snapshot: SourceSnapshot;
+  provider: AuthorProvider;
+  /** Chat model that authors the narration. */
+  model: string;
+}
+
+export type AuthorStageResult = AuthorPlanResult;
+
+/**
+ * Fills a scaffold plan's narration from an {@link AuthorProvider}, keeping every structural
+ * field (scene ids, source locations, step ranges) intact.
+ */
+export function runAuthor(
+  options: AuthorStageOptions,
+): Promise<AuthorStageResult> {
+  return authorPlan(options);
 }
 
 // ---------------------------------------------------------------------------------------

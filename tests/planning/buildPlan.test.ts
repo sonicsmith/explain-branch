@@ -55,7 +55,7 @@ test("produces a valid scaffold with a closing summary and no narration", async 
     generatedAt: GENERATED_AT,
   });
 
-  // The scaffold is validated without narration: the host agent authors that afterwards.
+  // The scaffold is validated without narration: the narration is authored afterwards.
   const validation = validatePlan(plan, {
     snapshot,
     requireNarration: false,

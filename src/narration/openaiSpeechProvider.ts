@@ -1,6 +1,7 @@
 /**
- * OpenAI-backed {@link SpeechProvider} (Phase 4 §1–§2). This is the only module that
- * imports the `openai` SDK, so the rest of the narration code stays offline-testable.
+ * OpenAI-backed {@link SpeechProvider} (Phase 4 §1–§2). This is one of only two modules that
+ * import the `openai` SDK (the authoring provider is the other), so the rest of the narration
+ * code stays offline-testable.
  *
  * Uses a non-streaming call: `audio.speech.create` returns the complete file, which we read
  * via `arrayBuffer()` (verified against `openai@7.27.0` — see ADR 0002, Decision 1).

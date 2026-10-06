@@ -27,8 +27,8 @@ export interface ValidatePlanOptions {
   /** Require per-scene narration audio metadata (used from Phase 4 onward). */
   requireNarrationAudio?: boolean;
   /**
-   * Require non-empty narration text. Defaults to `true`; the scaffold produced for the
-   * host agent sets this to `false` because the agent authors the narration afterwards.
+   * Require non-empty narration text. Defaults to `true`; the scaffold sets this to `false`
+   * because the narration is authored afterwards.
    */
   requireNarration?: boolean;
 }

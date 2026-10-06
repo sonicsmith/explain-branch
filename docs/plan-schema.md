@@ -5,9 +5,10 @@ Source of truth (keep in sync): `src/planning/types.ts` (`PLAN_SCHEMA_VERSION`) 
 
 ## Scene plan (`plan.json`)
 
-`PLAN_SCHEMA_VERSION = 3`. **Authored by you** (see [`cli.md`](./cli.md)): the tool writes only
-a narration-blank _scaffold_ (`artifacts/branch-explain/plan.scaffold.json`) and then, once you
-supply a plan, rewrites it with audio metadata via the narration stage.
+`PLAN_SCHEMA_VERSION = 3`. The tool writes a narration-blank _scaffold_
+(`artifacts/plan.scaffold.json`) and then rewrites the plan with audio metadata via the
+narration stage. `npm run explain` authors the narration itself; pass `--plan` to supply your
+own plan instead (see [`cli.md`](./cli.md)).
 
 ```ts
 interface ExplainerPlan {

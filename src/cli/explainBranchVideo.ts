@@ -24,6 +24,7 @@ import {
   resolveNarrationConfig,
   type NarrationConfigOverrides,
 } from "../narration/config.ts";
+import { resolveAuthorConfig } from "../authoring/config.ts";
 import {
   CredentialRejectedError,
   MissingCredentialError,
@@ -41,14 +42,17 @@ import {
   writeRunReport,
 } from "../pipeline/report.ts";
 import {
+  createPlaceholderAuthorProvider,
   createPlaceholderRenderRunner,
   createPlaceholderSpeechProvider,
+  fakeAuthorEnabled,
   fakeTtsEnabled,
   skipRenderEnabled,
 } from "../pipeline/testHooks.ts";
 import {
   PlanValidationError,
   resolveRunDir,
+  runAuthor,
   runInspect,
   runNarrate,
   runRender,
@@ -63,6 +67,7 @@ interface CliOptions {
   includeWorkingTree: boolean;
   maxScenes?: number;
   plan?: string;
+  authorModel?: string;
   runId?: string;
   runDir?: string;
   outPath?: string;
@@ -90,7 +95,7 @@ Usage:
   explain-branch-video [options]
 
 Options:
-  --plan <path>            Authored plan JSON to narrate and render (required unless --stdout)
+  --plan <path>            Narrate an authored plan instead of having the CLI author one
   --base <ref>             Compare against this ref (default: auto-resolved)
   --include-working-tree   Include uncommitted working-tree changes (default: false)
   --max-scenes <n>         Total scenes including the summary (default: 5, or the project config)
@@ -106,15 +111,17 @@ Options:
   --voice <name>           Voice (default: marin)
   --format <fmt>           Audio format: mp3|opus|aac|flac|wav|pcm (default: wav)
   --instructions <txt>     Tone/style instructions (gpt-4o-mini-tts only)
+  --author-model <id>      Chat model that authors the narration (default: gpt-4o-mini)
   --repo <path>            Path inside the repository (default: cwd)
   -h, --help               Show this help
 
 Artifacts are written under the run directory: plan.json (narrated), narration.txt,
 audio/<scene>.wav, render-input.json, and report.json. Narration requires OPENAI_API_KEY.
 
-This command does not write explanations. Run \`npm run plan\` to get a scaffold, then author
-the narration and steps yourself in plan.json (see docs/cli.md), then render with
-\`npm run explain -- --plan <plan.json>\`.
+This command authors the explanations itself: it scaffolds the branch and calls a chat model
+(`--author-model`) to write the per-scene narration, then narrates and renders. Source excerpts
+sent to that model are redacted the same way narration is. Pass `--plan <plan.json>` to use
+your own authored plan instead.
 
 Progress and pre-flight disclosure are written to stderr; stdout carries only the final
 machine-readable result (the run report JSON; the scaffold JSON with --stdout; a JSON summary
@@ -191,6 +198,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break;
       case "--plan":
         options.plan = takeValue();
+        break;
+      case "--author-model":
+        options.authorModel = takeValue();
         break;
       case "--run-id":
         options.runId = takeValue();
@@ -418,10 +428,23 @@ async function main(): Promise<void> {
       repositoryRoot,
       overrides: options.overrides,
     });
+    const { config: authorConfig } = await resolveAuthorConfig({
+      repositoryRoot,
+      ...(options.authorModel !== undefined
+        ? { model: options.authorModel }
+        : {}),
+    });
+    // Narration is authored by the CLI (a chat model) unless an authored plan is supplied.
+    const planArg = options.plan;
+    const willAuthor = planArg === undefined;
+    const fakeAuthor = fakeAuthorEnabled();
     const plannedOut =
       options.outPath ??
       path.join(repositoryRoot, "artifacts", "branch-explainer.mp4");
     log(`Narration:    ${config.voice} (${config.model}, ${config.format})`);
+    log(
+      `Authoring:    ${willAuthor ? authorConfig.model : "(using the supplied --plan)"}`,
+    );
     log(
       `Output:       ${
         options.dryRun
@@ -430,48 +453,21 @@ async function main(): Promise<void> {
       }`,
     );
 
-    // The explanations are authored by the user, not by this script. Require an authored plan
-    // so a mechanically-generated (and unhelpful) script is never produced.
-    //
-    // Credentials are pre-flighted first so a missing key fails fast (exit 4) with a setup
-    // message rather than a "no plan" error; we never fall back to a silent render.
+    // Credentials are pre-flighted so a missing key fails fast (exit 4) with a setup message
+    // rather than a "no plan" error; we never fall back to a silent render.
     if (!options.dryRun && !useFakeTts) readOpenAiApiKey();
-
-    if (options.plan === undefined) {
-      throw new PlanValidationError([
-        {
-          path: "plan",
-          message:
-            "no plan provided. Run `npm run plan` for a scaffold, author the narration and steps, then re-run with --plan <plan.json>.",
-        },
-      ]);
-    }
-
-    const authoredPath = path.resolve(repositoryRoot, options.plan);
-    let authoredPlan: ExplainerPlan;
-    try {
-      const raw = await readFile(authoredPath, "utf8");
-      authoredPlan = JSON.parse(raw) as ExplainerPlan;
-    } catch (error) {
-      throw new PlanValidationError([
-        {
-          path: authoredPath,
-          message: `could not read the plan JSON: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        },
-      ]);
-    }
-    log(`Plan:         ${authoredPath}`);
-    await validateAuthoredPlan(authoredPlan, repositoryRoot);
-    context.planned = true;
 
     let narratedPlan: ExplainerPlan | null = null;
     let narrateResult: NarrateStageResult | null = null;
 
-    // Resume only when the authored plan is the run's own narrated plan.json; a different
-    // authored plan must be (re)narrated so the video reflects it.
-    if (!options.force && !options.dryRun && authoredPath === planPath) {
+    // Resume only when this run would otherwise (re)narrate its own run-directory plan: the
+    // authored plan is that plan, or the CLI authored it. A different authored plan must be
+    // (re)narrated so the video reflects it.
+    const resumeCandidate =
+      planArg === undefined
+        ? true
+        : path.resolve(repositoryRoot, planArg) === planPath;
+    if (!options.force && !options.dryRun && resumeCandidate) {
       narratedPlan = await tryResumeNarratedPlan(planPath, repositoryRoot);
       if (narratedPlan !== null) {
         log(`[2/5] Reusing the validated narrated plan at ${planPath}`);
@@ -480,6 +476,58 @@ async function main(): Promise<void> {
     }
 
     if (narratedPlan === null) {
+      // Obtain the plan to narrate: read the authored file, or author one from a scaffold.
+      let authoredPlan: ExplainerPlan;
+      if (planArg === undefined) {
+        if (options.dryRun) {
+          throw new PlanValidationError([
+            {
+              path: "plan",
+              message:
+                "a dry run needs an authored plan: pass --plan <plan.json> (authoring is skipped for dry runs).",
+            },
+          ]);
+        }
+        log("[2/5] Building the scene scaffold...");
+        const scaffold = await runScaffold({
+          inventory,
+          ...(maxScenes !== undefined ? { maxScenes } : {}),
+        });
+        log(`[2/5] Authoring the narration with ${authorConfig.model}...`);
+        const provider = fakeAuthor
+          ? createPlaceholderAuthorProvider()
+          : (
+              await import("../authoring/openaiAuthorProvider.ts")
+            ).createOpenAiAuthorProvider({ apiKey: readOpenAiApiKey() });
+        const authored = await runAuthor({
+          plan: scaffold.plan,
+          snapshot: scaffold.snapshot,
+          provider,
+          model: authorConfig.model,
+        });
+        authoredPlan = authored.plan;
+        await validateAuthoredPlan(authoredPlan, repositoryRoot);
+      } else {
+        const authoredPath = path.resolve(repositoryRoot, planArg);
+        try {
+          authoredPlan = JSON.parse(
+            await readFile(authoredPath, "utf8"),
+          ) as ExplainerPlan;
+        } catch (error) {
+          throw new PlanValidationError([
+            {
+              path: authoredPath,
+              message: `could not read the plan JSON: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            },
+          ]);
+        }
+        log(`Plan:         ${authoredPath}`);
+        await validateAuthoredPlan(authoredPlan, repositoryRoot);
+      }
+      context.planned = true;
+
       // Checkpoint the authored plan so a failed narration can resume without re-authoring.
       // A dry run writes nothing at all.
       if (!options.dryRun) {

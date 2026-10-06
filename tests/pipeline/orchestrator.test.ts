@@ -348,3 +348,82 @@ test("a failed render keeps artifacts and a re-run resumes without regenerating 
     await repo.cleanup();
   }
 });
+
+test("authors the narration itself when no --plan is given", async () => {
+  const repo = await featureRepo();
+  try {
+    const result = await runCli(
+      ORCHESTRATOR,
+      ["--repo", repo.dir, "--run-id", "authored"],
+      offlineEnv({ EXPLAIN_BRANCH_TEST_FAKE_AUTHOR: "1" }),
+      repo.dir,
+    );
+    assert.equal(result.code, 0, `stderr: ${result.stderr}`);
+    assert.match(result.stderr, /Authoring:/);
+
+    const report = JSON.parse(result.stdout) as {
+      scenes: number;
+      clips: Array<{ durationMs: number | null }>;
+    };
+    assert.ok(report.scenes >= 1);
+    assert.equal(report.clips.length, report.scenes);
+    assert.ok(report.clips.every((clip) => (clip.durationMs ?? 0) > 0));
+
+    // The authoring checkpoint and the narrated plan were written.
+    const runDir = path.join(repo.dir, "artifacts", "authored");
+    await stat(path.join(runDir, "authored-plan.json"));
+    const plan = JSON.parse(
+      await readFile(path.join(runDir, "plan.json"), "utf8"),
+    ) as {
+      scenes: Array<{ narrationText: string }>;
+    };
+    assert.ok(plan.scenes.every((scene) => scene.narrationText.trim() !== ""));
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test("re-running the authoring flow reuses the narrated plan", async () => {
+  const repo = await featureRepo();
+  try {
+    const env = offlineEnv({ EXPLAIN_BRANCH_TEST_FAKE_AUTHOR: "1" });
+    const first = await runCli(
+      ORCHESTRATOR,
+      ["--repo", repo.dir, "--run-id", "reuse"],
+      env,
+      repo.dir,
+    );
+    assert.equal(first.code, 0, `stderr: ${first.stderr}`);
+
+    const planPath = path.join(repo.dir, "artifacts", "reuse", "plan.json");
+    const before = (await stat(planPath)).mtimeMs;
+
+    const second = await runCli(
+      ORCHESTRATOR,
+      ["--repo", repo.dir, "--run-id", "reuse"],
+      env,
+      repo.dir,
+    );
+    assert.equal(second.code, 0, `stderr: ${second.stderr}`);
+    assert.match(second.stderr, /Reusing the validated narrated plan/);
+    assert.equal((await stat(planPath)).mtimeMs, before);
+  } finally {
+    await repo.cleanup();
+  }
+});
+
+test("a dry run without --plan exits 3 (authoring is skipped on dry runs)", async () => {
+  const repo = await featureRepo();
+  try {
+    const result = await runCli(
+      ORCHESTRATOR,
+      ["--repo", repo.dir, "--dry-run"],
+      offlineEnv({ EXPLAIN_BRANCH_TEST_FAKE_AUTHOR: "1" }),
+      repo.dir,
+    );
+    assert.equal(result.code, 3, `stderr: ${result.stderr}`);
+    assert.match(result.stderr, /dry run needs an authored plan/);
+  } finally {
+    await repo.cleanup();
+  }
+});

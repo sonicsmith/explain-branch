@@ -7,6 +7,8 @@
  *
  * - `EXPLAIN_BRANCH_TEST_FAKE_TTS=1`     use the offline {@link FakeSpeechProvider}
  *                                        (no credential pre-flight, no API calls)
+ * - `EXPLAIN_BRANCH_TEST_FAKE_AUTHOR=1`  use the offline fake author provider so the CLI
+ *                                        authors narration without calling a chat model
  * - `EXPLAIN_BRANCH_TEST_SKIP_RENDER=1`  replace Remotion with a placeholder runner that
  *                                        writes a fake MP4 and exits 0
  * - `EXPLAIN_BRANCH_TEST_RENDER_FAIL=1`  make that placeholder runner exit non-zero
@@ -14,10 +16,13 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { createFakeAuthorProvider } from "../authoring/fakeAuthorProvider.ts";
+import type { AuthorProvider } from "../authoring/provider.ts";
 import { FakeSpeechProvider } from "../narration/fakeSpeechProvider.ts";
 import type { SpeechProvider } from "../narration/provider.ts";
 
 export const FAKE_TTS_ENV = "EXPLAIN_BRANCH_TEST_FAKE_TTS";
+export const FAKE_AUTHOR_ENV = "EXPLAIN_BRANCH_TEST_FAKE_AUTHOR";
 export const SKIP_RENDER_ENV = "EXPLAIN_BRANCH_TEST_SKIP_RENDER";
 export const RENDER_FAIL_ENV = "EXPLAIN_BRANCH_TEST_RENDER_FAIL";
 
@@ -30,6 +35,12 @@ export function fakeTtsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[FAKE_TTS_ENV] === "1";
 }
 
+export function fakeAuthorEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return env[FAKE_AUTHOR_ENV] === "1";
+}
+
 export function skipRenderEnabled(
   env: NodeJS.ProcessEnv = process.env,
 ): boolean {
@@ -39,6 +50,11 @@ export function skipRenderEnabled(
 /** A fresh offline provider (deterministic silent WAV clips). */
 export function createPlaceholderSpeechProvider(): SpeechProvider {
   return new FakeSpeechProvider();
+}
+
+/** A fresh offline author provider (deterministic, always-valid narration). */
+export function createPlaceholderAuthorProvider(): AuthorProvider {
+  return createFakeAuthorProvider();
 }
 
 /**

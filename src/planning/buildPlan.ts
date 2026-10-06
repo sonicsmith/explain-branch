@@ -234,7 +234,8 @@ function buildGroupScene(
     id: `scene-${index + 1}`,
     title: `Changes in ${whereLabel(group.key)}`,
     purpose: `Explain the code that changed in ${whereLabel(group.key)}.`,
-    // Left blank: the host agent authors the narration from the inspected source.
+    // Left blank: the narration is authored later — by the CLI's authoring stage, or by
+    // whoever writes the plan passed to `--plan`.
     narrationText: "",
     visual: chooseVisual(group.files),
     // Cover every location a step references, so step ranges stay inside a source location.
@@ -246,7 +247,7 @@ function buildGroupScene(
 }
 
 function buildSummaryScene(): ExplainerScene {
-  // The scaffold only reserves the summary scene; the host agent authors its narration.
+  // The scaffold only reserves the summary scene; its narration is authored later.
   return {
     id: "summary",
     title: "Summary",

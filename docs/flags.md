@@ -2,15 +2,15 @@
 
 ## Orchestrator — `src/cli/explainBranchVideo.ts` (`npm run explain`)
 
-The single command that narrates, renders, and validates an **authored plan**: narrate →
-render → validate. It requires `--plan`; it writes only under the run directory and `--out`.
+The single command that authors, narrates, renders, and validates: author → narrate → render →
+validate. It writes only under the run directory and `--out`.
 
-The explanations are authored by you, not by the script. Use `npm run plan` for a scaffold
-first (see [`cli.md`](./cli.md)).
+By default the CLI authors the narration itself with a chat model (`--author-model`). Pass
+`--plan <plan.json>` to use your own authored plan instead (see [`cli.md`](./cli.md)).
 
 | Flag                     | Meaning                                                      | Default                                                                    |
 | ------------------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `--plan <path>`          | Authored plan JSON to narrate and render                     | **required** unless `--stdout`                                             |
+| `--plan <path>`          | Use an authored plan instead of having the CLI author one    | auto-authored                                                              |
 | `--base <ref>`           | Comparison base                                              | auto-resolved (flag > config > `origin/HEAD` > upstream > `main`/`master`) |
 | `--include-working-tree` | Include uncommitted working-tree changes                     | `false`                                                                    |
 | `--max-scenes <n>`       | Total scenes including the summary                           | `5` (or project config)                                                    |
@@ -19,6 +19,7 @@ first (see [`cli.md`](./cli.md)).
 | `--voice <name>`         | Voice                                                        | `marin`                                                                    |
 | `--format <fmt>`         | Audio format (`mp3`/`opus`/`aac`/`flac`/`wav`/`pcm`)         | `wav`                                                                      |
 | `--instructions <txt>`   | Tone/style instructions (`gpt-4o-mini-tts` only)             | built-in default                                                           |
+| `--author-model <id>`    | Chat model that authors the narration                        | `gpt-4o-mini`                                                              |
 | `--out <path>`           | Output MP4                                                   | `<repo>/artifacts/branch-explainer.mp4`                                    |
 | `--run-id <id>`          | Run directory name                                           | sanitised branch name                                                      |
 | `--run-dir <path>`       | Explicit run directory                                       | `<repo>/artifacts/<run-id>`                                                |
@@ -49,12 +50,14 @@ Set defaults once in `.explain-branch.json` (or `package.json` → `explainBranc
 {
   "base": "main",
   "maxScenes": 5,
+  "authoring": { "model": "gpt-4o-mini" },
   "narration": { "voice": "cedar", "model": "gpt-4o-mini-tts", "format": "wav" }
 }
 ```
 
 Narration precedence: CLI flag > `.explain-branch.json` > `package.json` >
-`EXPLAIN_BRANCH_TTS_*` env > built-in defaults.
+`EXPLAIN_BRANCH_TTS_*` env > built-in defaults. The authoring model uses the same chain
+(`--author-model` / `authoring.model` / `EXPLAIN_BRANCH_AUTHOR_MODEL`).
 
 ## Stage CLIs (independently runnable)
 

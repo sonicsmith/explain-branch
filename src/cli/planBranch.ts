@@ -4,9 +4,8 @@
  *
  * Builds the deterministic **scaffold** for a branch (grouping, source locations, suggested
  * walkthrough steps) and writes it to `artifacts/plan.scaffold.json` (or prints it with
- * `--stdout`). The scaffold has no narration: author the plan yourself by reading the code
- * (see `docs/cli.md`), then render it via `npm run explain -- --plan <path>`. Read-only with
- * respect to source.
+ * `--stdout`). The scaffold has no narration: `npm run explain` authors it, or write the plan
+ * yourself and pass it with `--plan` (see `docs/cli.md`). Read-only with respect to source.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -39,8 +38,8 @@ Options:
   --stdout                 Print the scaffold JSON instead of writing a file
   -h, --help               Show this help
 
-The scaffold has no narration. Author the explanations and steps yourself in plan.json
-(see docs/cli.md), then render with:  npm run explain -- --plan <plan.json>
+The scaffold has no narration. `npm run explain` authors it, or write plan.json yourself and
+render with:  npm run explain -- --plan <plan.json>
 
 Exit codes: 0 success, 2 base could not be determined, 3 scaffold failed validation, 1 other.
 `;

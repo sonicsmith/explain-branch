@@ -1,8 +1,8 @@
 import type { RenderInput } from "../RenderInput.ts";
 
 /**
- * Hand-written fixture plan used to render a deterministic video. It mirrors the shape a
- * host agent authors on top of the scaffold: multi-step code scenes with plain-English
+ * Hand-written fixture plan used to render a deterministic video. It mirrors the shape the
+ * authoring stage produces on top of the scaffold: multi-step code scenes with plain-English
  * narration, the self-contained `changes` list, and captured `sources`, so no repository
  * access is required to render it.
  */

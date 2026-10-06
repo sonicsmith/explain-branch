@@ -4,8 +4,10 @@
 viewer through **what changed, how the changed code works, and how it fits the wider
 application** — like a developer walking another developer through a pull request.
 
-You author the explanations; the tool inspects, narrates, renders, and validates. With no
-authored plan it stops (exit `3`) rather than emitting a mechanically-generated script.
+The CLI authors the explanations: it scaffolds the branch and calls a chat model to write a
+narration that walks the change a few lines at a time, then narrates, renders, and validates.
+Source excerpts sent to that model are redacted the same way narration is. Prefer to write the
+narration yourself? Supply your own plan with `--plan`.
 
 ## Requirements
 
@@ -16,13 +18,13 @@ authored plan it stops (exit `3`) rather than emitting a mechanically-generated 
 
 ## Commands
 
-| Command                  | What it does                                            |
-| ------------------------ | ------------------------------------------------------- |
-| `explain-branch explain` | Run the whole pipeline: narrate → render → validate     |
-| `explain-branch inspect` | Print the change inventory (read-only)                  |
-| `explain-branch plan`    | Build the scene scaffold (no narration)                 |
-| `explain-branch narrate` | Generate per-scene narration audio for an authored plan |
-| `explain-branch render`  | Render a narrated plan to an MP4                        |
+| Command                  | What it does                                                 |
+| ------------------------ | ------------------------------------------------------------ |
+| `explain-branch explain` | Run the whole pipeline: author → narrate → render → validate |
+| `explain-branch inspect` | Print the change inventory (read-only)                       |
+| `explain-branch plan`    | Build the scene scaffold (no narration)                      |
+| `explain-branch narrate` | Generate per-scene narration audio for an authored plan      |
+| `explain-branch render`  | Render a narrated plan to an MP4                             |
 
 `explain-branch --help` lists the commands; `explain-branch <command> --help` shows that
 command's own flags. The same commands are available as npm scripts: `npm run explain`,
@@ -37,65 +39,73 @@ npm install
 npm run browser:ensure            # one-time Chrome Headless Shell download
 cp .env.example .env              # then put your real OPENAI_API_KEY in .env
 
-npm run plan -- --out artifacts/run/plan.scaffold.json   # 1. scaffold (grouping + steps)
-# 2. read the code and author artifacts/run/plan.json (see below)
-npm run explain -- --plan artifacts/run/plan.json        # 3. narrate → render → validate
+npm run explain                   # analyse → author → narrate → render → validate
 ```
+
+One command. The CLI inspects the branch, scaffolds the scenes, authors the narration with a
+chat model, synthesises the voice, renders the video, and writes the report. To write the
+narration yourself instead, pass an authored plan: `npm run explain -- --plan plan.json` (use
+`npm run plan` to produce a scaffold to start from).
 
 `.env` is loaded automatically from the current directory (a real `OPENAI_API_KEY` in the
 environment takes precedence). It is gitignored — never commit it.
 
 The MP4 defaults to `artifacts/branch-explainer.mp4`.
 
-## Authoring the plan
+## How the narration is authored
 
-### 1. Scaffold
+By default `explain-branch explain` authors the narration for you:
 
-```bash
-npm run plan -- --out artifacts/run/plan.scaffold.json
-```
+1. **Scaffold.** It groups the changed files into scenes, captures the source locations, and
+   proposes walkthrough `steps` (a few lines each) — no narration yet.
+2. **Author.** It sends the scaffold and the redacted source for those locations to a chat model
+   (`--author-model`, default `gpt-4o-mini`) and gets back a title, a one-sentence purpose, and
+   one narration per step (plus a summary). The model may not move any line ranges — only write
+   the words — so the authored plan always validates against the same source as its scaffold.
+3. **Merge and validate.** The authored text is merged into the plan and validated, then
+   narration and rendering proceed.
 
-This writes a **scaffold**: deterministic grouping of the changed files into scenes, the source
-locations, and suggested walkthrough `steps` (with blank narration). It writes no explanations.
+Set the authoring model with `--author-model`, `.explain-branch.json` (`authoring.model`),
+`package.json` (`explainBranch.authoring.model`), or `EXPLAIN_BRANCH_AUTHOR_MODEL`.
 
-### 2. Read the code, then author `plan.json`
+### Writing the narration yourself
 
-Read the actual source at the scaffold's step ranges — plus enough surrounding context and
-callers to understand what the code does. Then write `plan.json` (schema v3, see
-[`plan-schema.md`](./plan-schema.md)) with:
+Pass `--plan <plan.json>` to skip authoring and use your own plan. Start from a scaffold
+(`npm run plan -- --out plan.scaffold.json`), read the real source at the step ranges, and write
+schema-v3 `plan.json` (see [`plan-schema.md`](./plan-schema.md)):
 
-- one **scene** per meaningful change (keep the scaffold's grouping, or adjust it),
-- ordered **`steps`** per scene: each step highlights a **few lines** and carries the narration
-  that explains those lines,
-- `narrationText` set to the scene's step narrations joined with a space (this is what is
-  spoken; the highlights follow the steps).
+- one **scene** per meaningful change,
+- ordered **`steps`** per scene, each highlighting a **few lines** and carrying the narration for
+  those lines,
+- `narrationText` set to the scene's step narrations joined with a space (this is what is spoken;
+  the highlights follow the steps).
 
-**How to write the narration**
+Guiding principles for good narration (they apply to the model and to you):
 
 - Explain **what the code does and why it matters** — not how many files changed.
-- Assume the viewer is a competent engineer who may **not know this language or framework**.
-  Spell out idiomatic constructs (decorators, generics, list comprehensions, build tags, shell
-  flags) in plain terms.
-- Walk a **few lines at a time**. Each step is roughly one to three sentences; a scene is
-  usually three to eight steps.
-- Be conversational and concrete. Describe behaviour ("it retries the request so the caller can
-  resume") rather than restating syntax ("this line calls retry").
+- Assume a competent engineer who may **not know this language or framework**. Spell out
+  idiomatic constructs (decorators, generics, list comprehensions, build tags, shell flags) in
+  plain terms.
+- Walk a **few lines at a time**. Each step is roughly one to three sentences; a scene is usually
+  three to eight steps.
+- Be conversational and concrete. Describe behaviour rather than restating syntax.
 - Ground every claim in the inspected source. **Never invent the author's motivation or product
   requirements** — if the reason is not evident, describe what the code does.
-- Do not read the diff aloud line by line, and do not list file names or counts as narration.
+- Do not read the diff aloud line by line, and do not narrate file names or counts.
 
-### 3. Narrate and render
+Then narrate and render:
 
 ```bash
 # OPENAI_API_KEY is read from .env (copy .env.example) or the environment
-npm run explain -- --plan artifacts/run/plan.json
+npm run explain -- --plan plan.json
 ```
 
-This validates your plan (schema, line ranges, step ranges), generates one TTS clip per scene,
+This validates the plan (schema, line ranges, step ranges), generates one TTS clip per scene,
 renders the MP4, validates the output, and writes the run report. Secret-looking values are
 redacted from narration (including step captions) before anything leaves the machine. If the
 plan fails validation you get exit `3` with the exact issue paths; fix them and re-run.
-Re-running reuses cached clips for unchanged scenes.
+Re-running reuses cached clips for unchanged scenes. The same checks apply when the CLI authors
+the plan for you.
 
 **Narration requires `OPENAI_API_KEY`.** Without it the command stops with a clear setup message
 and exit code `4` — it never renders a silent video.
@@ -114,7 +124,7 @@ See [`flags.md`](./flags.md). In short: exit `0` success · `2` base/config coul
 · `3` plan missing or failed validation · `4` missing/rejected `OPENAI_API_KEY` · the renderer's
 exit code on render failure · `1` other. On failure the run directory is kept and a resume
 command is printed. Repository defaults can be set in `.explain-branch.json` or `package.json`
-(`explainBranch`): `base`, `maxScenes`, and a `narration` object.
+(`explainBranch`): `base`, `maxScenes`, and `narration`/`authoring` objects.
 
 ## Workflow
 
@@ -125,12 +135,10 @@ command is printed. Repository defaults can be set in `.explain-branch.json` or 
    you must pass `--base`. A merge-base comparison is used.
 2. **State the plan before long work.** Note which branch and base will be analysed and whether
    uncommitted changes are included.
-3. **Scaffold** (`explain-branch plan`) — grouping, source locations, and suggested steps.
-4. **Read beyond the diff.** Trace the affected functions, callers, imports, tests, and data
-   flow so you can explain behaviour, not just text. Then author the step explanations and write
-   `plan.json`.
-5. **Narrate → render → validate** (`explain-branch explain --plan …`).
-6. **Review** the output MP4 plus the omissions, caveats, and render errors in the report.
+3. **Scaffold and author** (`explain-branch explain`) — group the changes and write the step
+   narration (the CLI calls a chat model; pass `--plan` to write it yourself).
+4. **Narrate → render → validate.**
+5. **Review** the output MP4 plus the omissions, caveats, and render errors in the report.
 
 ## Hard rules
 
@@ -153,14 +161,17 @@ command is printed. Repository defaults can be set in `.explain-branch.json` or 
 | Base ref                    | auto-resolved (see Workflow)       |
 | Include uncommitted changes | `false`                            |
 | Max scenes                  | 5                                  |
+| Authoring model             | `gpt-4o-mini`                      |
 | Narration                   | `marin` (`gpt-4o-mini-tts`, `wav`) |
 | Output path                 | `artifacts/branch-explainer.mp4`   |
 
 ## Privacy
 
-- **Sent to the TTS provider:** the narration text per scene (derived from the diff). Nothing
-  else.
+- **Sent to OpenAI:** the narration text per scene to the TTS provider, and — when the CLI
+  authors the narration — the scaffold plus the source excerpts for the referenced locations to
+  the authoring chat model. Nothing else.
 - **Never sent:** the API key — read from the environment (or a local, gitignored `.env`),
   never written to the plan, logs, or video.
-- Secret-looking values are redacted from narration before transmission.
+- Secret-looking values are redacted from narration **and** from the source excerpts before
+  transmission.
 - The narration voice is **AI-generated**, not a human voice.
