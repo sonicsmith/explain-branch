@@ -8,6 +8,12 @@
 - **Supersedes:** the deterministic narration in `src/planning/buildPlan.ts` (Phase 2) and the
   argument-free `npm run explain` flow (Phase 5).
 
+> **Historical note (2026-10-06):** the plugin/skill surface ("the host coding agent") was
+> removed in [ADR 0005](0005-drop-plugin-packaging.md). Explanations are now authored by the
+> user via the CLI scaffold → author → render flow (see [`docs/cli.md`](../cli.md)); the
+> decision recorded here — author narration rather than generate it mechanically — still
+> stands.
+
 ## Context
 
 Through Phase 5 the planner produced narration text mechanically from the diff:

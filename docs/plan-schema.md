@@ -5,10 +5,9 @@ Source of truth (keep in sync): `src/planning/types.ts` (`PLAN_SCHEMA_VERSION`) 
 
 ## Scene plan (`plan.json`)
 
-`PLAN_SCHEMA_VERSION = 3`. **Authored by the host coding agent** (see
-`skills/explain-branch/SKILL.md`): the script writes only a narration-blank _scaffold_
-(`artifacts/branch-explain/plan.scaffold.json`) and then, once the agent supplies a plan,
-rewrites it with audio metadata via the narration stage.
+`PLAN_SCHEMA_VERSION = 3`. **Authored by you** (see [`cli.md`](./cli.md)): the tool writes only
+a narration-blank _scaffold_ (`artifacts/branch-explain/plan.scaffold.json`) and then, once you
+supply a plan, rewrites it with audio metadata via the narration stage.
 
 ```ts
 interface ExplainerPlan {

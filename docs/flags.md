@@ -5,8 +5,8 @@
 The single command that narrates, renders, and validates an **authored plan**: narrate →
 render → validate. It requires `--plan`; it writes only under the run directory and `--out`.
 
-The explanations are authored by the host coding agent, not by the script. Use `npm run plan`
-for a scaffold first (see `SKILL.md`).
+The explanations are authored by you, not by the script. Use `npm run plan` for a scaffold
+first (see [`cli.md`](./cli.md)).
 
 | Flag                     | Meaning                                                      | Default                                                    |
 | ------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- |
@@ -65,16 +65,11 @@ Narration precedence: CLI flag > `.explain-branch.json` > `package.json` >
 | `npm run narrate`         | Generate per-scene narration audio          | `--plan`, `--run-id`/`--run-dir`, `--out`, `--dry-run`, `--force`, `--scene`, narration flags |
 | `npm run render:narrated` | Render a narrated plan to MP4               | `--plan`, `--out`, `--overwrite`                                                              |
 
-## Invocation contract (skill → CLI)
+## Invocation contract
 
-- **Codex surface:** the skill is invoked as `$explain-branch`; the Claude/other surface uses
-  `/explain-branch`.
-- The host sets **`PLUGIN_ROOT`** to the plugin directory and runs the skill with the target
-  repository as the **cwd**. The skill runs the scaffold, authors a plan, then:
-  `node "${PLUGIN_ROOT}/src/cli/explainBranchVideo.ts" --plan <plan.json> [flags…]`
-- Flags are passed through as **argv** unchanged. All paths are resolved against the cwd
-  (the repository being explained) unless `--repo` is given.
-
-> The exact trigger token and argv/stdin contract must be confirmed in the target client
-> (no Codex CLI is available in this environment). See
-> `docs/adr/0003-phase-5-integration-decisions.md` (Decision 6).
+- The entry point is `bin/explain-branch.ts`, dispatched as `explain-branch <command> [flags…]`
+  (or `npm run <script> -- [flags…]`). Each subcommand re-execs the stage CLI in its own `node`
+  process, so exit codes and stdio pass through unchanged.
+- Run from the repository being explained (**cwd**). All paths resolve against the cwd unless
+  `--repo` is given.
+- Flags are passed through as **argv** unchanged.

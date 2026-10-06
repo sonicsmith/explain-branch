@@ -162,6 +162,11 @@ false-success when the renderer writes nothing.
 
 ## Decision 6 — Skill and plugin wiring (§6)
 
+> **Historical note (2026-10-06):** the plugin/skill surface was removed in
+> [ADR 0005](0005-drop-plugin-packaging.md). The orchestrator is now invoked directly as
+> `explain-branch explain`; the argument/exit-code contract below still holds, but
+> `PLUGIN_ROOT` and the skill trigger no longer exist. See [`docs/cli.md`](../cli.md).
+
 **Decision.** The skill invokes the orchestrator and is honest about credentials and versions.
 
 - **Invocation contract.** The Codex surface triggers the skill as `$explain-branch` (the

@@ -6,6 +6,10 @@
 - **Scope:** Records the five decisions required by Phase 0. No product features are
   built here; these decisions de-risk Phases 1–6.
 
+> **Historical note (2026-10-06):** the plugin/skill packaging described in Decision 1 was
+> removed in [ADR 0005](0005-drop-plugin-packaging.md). The project is now a standalone CLI;
+> see [`docs/cli.md`](../cli.md). The rest of this ADR is retained as a record.
+
 ## Context
 
 The plan depends on four external systems: the Codex plugin/skill format, a local

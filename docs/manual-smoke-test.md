@@ -21,8 +21,8 @@ npm run browser:ensure            # one-time Chrome Headless Shell download
 
 2. **Author the plan.** Read the changed code and write `artifacts/smoke/plan.json` (schema v3):
    one scene per meaningful change, ordered `steps` per scene (each a few lines + its
-   explanation), and `narrationText` set to the steps joined. This is what the host coding
-   agent does in the skill — see [`../skills/explain-branch/SKILL.md`](../skills/explain-branch/SKILL.md).
+   explanation), and `narrationText` set to the steps joined. See
+   [`cli.md`](./cli.md) for the authoring workflow.
 
 3. Review the estimated cost without calling the API or writing audio:
 
