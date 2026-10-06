@@ -112,9 +112,9 @@ Options:
 Artifacts are written under the run directory: plan.json (narrated), narration.txt,
 audio/<scene>.wav, render-input.json, and report.json. Narration requires OPENAI_API_KEY.
 
-This command does not write explanations. Run \`npm run plan\` to get a scaffold, author the
-narration and steps (the host coding agent does this — see skills/explain-branch/SKILL.md),
-then render with \`npm run explain -- --plan <plan.json>\`.
+This command does not write explanations. Run \`npm run plan\` to get a scaffold, then author
+the narration and steps yourself in plan.json (see docs/cli.md), then render with
+\`npm run explain -- --plan <plan.json>\`.
 
 Progress and pre-flight disclosure are written to stderr; stdout carries only the final
 machine-readable result (the run report JSON; the scaffold JSON with --stdout; a JSON summary
@@ -430,8 +430,8 @@ async function main(): Promise<void> {
       }`,
     );
 
-    // The explanations are authored by the host coding agent, not by this script. Require an
-    // authored plan so a mechanically-generated (and unhelpful) script is never produced.
+    // The explanations are authored by the user, not by this script. Require an authored plan
+    // so a mechanically-generated (and unhelpful) script is never produced.
     //
     // Credentials are pre-flighted first so a missing key fails fast (exit 4) with a setup
     // message rather than a "no plan" error; we never fall back to a silent render.

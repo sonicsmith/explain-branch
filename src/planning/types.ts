@@ -92,9 +92,9 @@ export interface SceneChange {
  * in order: the highlighted range advances as its narration plays, so the viewer is walked
  * through the change a few lines at a time instead of being shown one static block.
  *
- * Steps are authored by the host coding agent (see `skills/explain-branch/SKILL.md`); the
- * script never invents narration. `SceneStep.narration`, joined in order, should make up the
- * scene's `narrationText` so captions, audio, and highlights stay aligned.
+ * Steps are authored by you (see `docs/cli.md`); the script never invents narration.
+ * `SceneStep.narration`, joined in order, should make up the scene's `narrationText` so
+ * captions, audio, and highlights stay aligned.
  */
 export interface SceneStep {
   /** Plain-English explanation of what the highlighted lines do. */

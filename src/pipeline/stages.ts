@@ -52,16 +52,21 @@ import { capturePlanSnapshot } from "../narration/validateNarration.ts";
 export { NarrationConfigError };
 export { BaseResolutionError } from "../git/inspectBranch.ts";
 
-/** Plugin/repository root, resolved from this module's location (`src/pipeline/`). */
-export const PLUGIN_ROOT = fileURLToPath(new URL("../../", import.meta.url));
+/** Project root, resolved from this module's location (`src/pipeline/`). */
+export const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const REMOTION_CLI = path.join(
-  PLUGIN_ROOT,
+  PROJECT_ROOT,
   "node_modules",
   "@remotion",
   "cli",
   "remotion-cli.js",
 );
-const DEFAULT_ENTRY_POINT = path.join(PLUGIN_ROOT, "src", "render", "index.ts");
+const DEFAULT_ENTRY_POINT = path.join(
+  PROJECT_ROOT,
+  "src",
+  "render",
+  "index.ts",
+);
 const DEFAULT_COMPOSITION_ID = "ExplainBranch";
 
 // ---------------------------------------------------------------------------------------
@@ -176,9 +181,9 @@ export interface ScaffoldStageResult {
 
 /**
  * Builds a **scaffold** scene plan: deterministic grouping, source locations, and suggested
- * walkthrough steps, with narration left blank. The host coding agent reads the code and
- * authors the narration, then calls the render path with `--plan`. Accepts a pre-built
- * inventory so the orchestrator does not inspect the repository twice.
+ * walkthrough steps, with narration left blank. The author reads the code and authors the
+ * narration, then calls the render path with `--plan`. Accepts a pre-built inventory so the
+ * orchestrator does not inspect the repository twice.
  */
 export async function runScaffold(
   options: ScaffoldStageOptions,
@@ -478,7 +483,7 @@ export async function runRender(
 
   const runner = options.runner ?? runRemotion;
   const command = [process.execPath, REMOTION_CLI, ...args].join(" ");
-  const exitCode = await runner(args, PLUGIN_ROOT);
+  const exitCode = await runner(args, PROJECT_ROOT);
 
   return { outPath, renderInputPath, collided, command, exitCode };
 }

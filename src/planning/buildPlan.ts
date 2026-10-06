@@ -188,8 +188,8 @@ function toSceneChange(file: InventoryFile): SceneChange {
 
 /**
  * Suggests walkthrough steps for a scene: one step per contiguous run of added lines that
- * falls inside a source location. The narration is left blank — the host coding agent fills
- * it in by reading the code. This is the scaffold, not the final plan.
+ * falls inside a source location. The narration is left blank — the author fills it in by
+ * reading the code. This is the scaffold, not the final plan.
  */
 function buildSteps(
   files: readonly InventoryFile[],
@@ -341,10 +341,10 @@ function dedupeOmissions(omissions: readonly PlanOmission[]): PlanOmission[] {
 
 /**
  * Turns a change inventory into a **scaffold** scene plan: deterministic grouping, source
- * locations, and suggested walkthrough steps with all narration left blank. The host coding
- * agent fills in the narration by reading the code (see `skills/explain-branch/SKILL.md`);
- * the planner never invents explanations. Deterministic: the same inventory and `generatedAt`
- * produce an identical scaffold, so the agent's plan stays reproducible.
+ * locations, and suggested walkthrough steps with all narration left blank. The author fills
+ * in the narration by reading the code (see `docs/cli.md`); the planner never invents
+ * explanations. Deterministic: the same inventory and `generatedAt` produce an identical
+ * scaffold, so the authored plan stays reproducible.
  */
 export async function buildPlanScaffold(
   options: BuildPlanScaffoldOptions,
